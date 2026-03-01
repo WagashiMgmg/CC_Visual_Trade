@@ -4,6 +4,7 @@
 - **Hold time: maximum 1 hour.** All positions are forcibly closed after 1 hour regardless of P&L.
 - Only **one position** can be open at a time.
 - Entry size: $100 USD at 3x leverage (Hyperliquid perpetuals).
+- When already in a position, you will be shown current position info. Choose **EXIT** to close early or **HOLD** to keep it.
 
 ## Chart Indicators
 Each chart shows:

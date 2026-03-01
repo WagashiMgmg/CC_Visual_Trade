@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import markdown as md
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -59,10 +60,11 @@ def _get_latest_cycle():
         c = session.query(Cycle).order_by(Cycle.id.desc()).first()
         if not c:
             return None
+        raw_reason = c.ai_reasoning or ""
         return {
             "timestamp": c.timestamp.strftime("%Y-%m-%d %H:%M UTC"),
             "decision": c.ai_decision,
-            "reason": c.ai_reasoning,
+            "reason": md.markdown(raw_reason) if raw_reason else "—",
             "action": c.action_taken,
             "chart_path": c.chart_path,
         }
@@ -97,7 +99,7 @@ def _get_recent_trades(limit=20):
         return result
 
 
-_TF_ORDER = ["15m", "30m", "1h", "1d", "1w", "1M"]
+_TF_ORDER = ["1m", "5m", "15m", "30m", "1h", "1d", "1w", "1M"]
 
 
 def _get_all_chart_urls() -> list[dict]:

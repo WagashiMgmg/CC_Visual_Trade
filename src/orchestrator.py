@@ -10,7 +10,8 @@ import subprocess
 from datetime import datetime
 
 from src.config import settings
-from src.database import Cycle, get_session
+from src.database import Cycle, Trade, get_session
+from src.trader import calc_pnl
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,39 @@ DECISION: LONG or SHORT or HOLD
 REASON: （日本語で理由を記述）
 """
 
+_PROMPT_IN_POSITION = """\
+{context}
+
+---
+
+現在ポジション保有中:
+- サイド: {side}
+- エントリー価格: ${entry_price:,.2f}
+- 保有時間: {elapsed}
+- 含み損益: {pnl_sign}${pnl_usd:.2f}（推定）
+
+以下の{count}つのチャートを Read ツールで開いてください:
+{chart_list}
+
+チャートを見て、現在のポジションをどうするか判断してください。
+
+判断後、以下のアクションを必ず取ること:
+- EXIT と判断した場合 → Bash ツールで `python /app/script/close.py` を実行すること
+- HOLD と判断した場合 → 何もしない（ポジション継続）
+
+最後に必ず以下のフォーマットで出力すること:
+DECISION: EXIT or HOLD
+REASON: （日本語で理由を記述）
+"""
+
+
+def _fetch_mid(coin: str) -> float:
+    """Fetch current mid price from Hyperliquid."""
+    from hyperliquid.info import Info
+    from hyperliquid.utils import constants
+    info = Info(constants.MAINNET_API_URL, skip_ws=True)
+    return float(info.all_mids()[coin])
+
 
 def _load_context() -> str:
     try:
@@ -58,7 +92,7 @@ def _parse_response(output: str) -> dict:
     decision = "HOLD"
     reason = ""
 
-    m = re.search(r"DECISION:\s*(LONG|SHORT|HOLD)", output, re.IGNORECASE)
+    m = re.search(r"DECISION:\s*(LONG|SHORT|HOLD|EXIT)", output, re.IGNORECASE)
     if m:
         decision = m.group(1).upper()
 
@@ -69,21 +103,47 @@ def _parse_response(output: str) -> dict:
     return {"decision": decision, "reason": reason}
 
 
-def run_cycle(charts: list[tuple[str, str, str]]) -> dict:
+def run_cycle(charts: list[tuple[str, str, str]], open_trade: Trade | None = None) -> dict:
     """
     Run one trading cycle with multi-timeframe charts.
     charts: list of (interval, label, file_path) from generate_multi_tf_charts()
+    open_trade: expunged Trade object when in a position, or None.
     Returns dict with 'decision' and 'reason'.
     """
     coin = settings.trading_coin
     chart_list_str = _build_chart_list(charts)
-    prompt = _PROMPT_TEMPLATE.format(
-        context=_load_context(),
-        count=len(charts),
-        chart_list=chart_list_str,
-    )
+    context = _load_context()
 
-    logger.info(f"Calling Claude Code CLI with {len(charts)} timeframe charts")
+    if open_trade:
+        now = datetime.utcnow()
+        elapsed_str = f"{int((now - open_trade.entry_time).total_seconds() // 60)}分"
+        try:
+            current_price = _fetch_mid(open_trade.coin)
+        except Exception as e:
+            logger.warning(f"Failed to fetch mid price: {e}. Using entry price.")
+            current_price = open_trade.entry_price
+        pnl = calc_pnl(open_trade.side, open_trade.entry_price, current_price, open_trade.size_usd)
+        prompt = _PROMPT_IN_POSITION.format(
+            context=context,
+            side=open_trade.side.upper(),
+            entry_price=open_trade.entry_price,
+            elapsed=elapsed_str,
+            pnl_sign="+" if pnl >= 0 else "",
+            pnl_usd=abs(pnl),
+            count=len(charts),
+            chart_list=chart_list_str,
+        )
+        logger.info(
+            f"Calling Claude Code CLI (IN POSITION: {open_trade.side.upper()}) "
+            f"with {len(charts)} timeframe charts"
+        )
+    else:
+        prompt = _PROMPT_TEMPLATE.format(
+            context=context,
+            count=len(charts),
+            chart_list=chart_list_str,
+        )
+        logger.info(f"Calling Claude Code CLI with {len(charts)} timeframe charts")
 
     claude_output = ""
     try:

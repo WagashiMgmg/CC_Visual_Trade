@@ -49,7 +49,7 @@
       <div class="decision-badge decision-{{ (latest_cycle.decision or 'HOLD') | lower }}">
         {{ latest_cycle.decision or 'HOLD' }}
       </div>
-      <div class="decision-reason">{{ latest_cycle.reason or '—' }}</div>
+      <div class="decision-reason">{{ latest_cycle.reason | safe }}</div>
       <div class="cycle-time">{{ latest_cycle.timestamp }}</div>
     {% else %}
       <div class="no-position">No cycles yet</div>

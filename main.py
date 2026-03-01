@@ -38,16 +38,13 @@ def trading_cycle():
     3. (Claude executes long/short script internally via Bash tool)
     4. Record cycle in DB
     """
-    from src.database import Trade, get_session
     from src.chart import generate_multi_tf_charts
     from src.orchestrator import run_cycle
+    from src.trader import get_open_trade
 
-    # Skip if already in a position
-    with get_session() as session:
-        open_trade = session.query(Trade).filter(Trade.status == "open").first()
-        if open_trade:
-            logger.info(f"Skipping cycle — already in position (trade_id={open_trade.id})")
-            return
+    open_trade = get_open_trade()
+    if open_trade:
+        logger.info(f"Open position found (trade_id={open_trade.id}), will ask Claude for EXIT/HOLD")
 
     logger.info("=== Trading cycle start ===")
     try:
@@ -60,7 +57,7 @@ def trading_cycle():
         return
 
     try:
-        result = run_cycle(charts)
+        result = run_cycle(charts, open_trade=open_trade)
         logger.info(f"Cycle complete: {result['decision']} — {result['reason'][:60]}")
     except Exception as e:
         logger.error(f"Orchestrator failed: {e}")

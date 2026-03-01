@@ -18,6 +18,8 @@ HYPERLIQUID_API = "https://api.hyperliquid.xyz/info"
 
 # Timeframes to generate: (interval, candle_count, label)
 TIMEFRAMES = [
+    ("1m",   100, "1min  (~1.7h)"),
+    ("5m",   100, "5min  (~8h)"),
     ("15m",  100, "15min (~25h)"),
     ("30m",   96, "30min (~2d)"),
     ("1h",    72, "1h    (~3d)"),
@@ -28,6 +30,8 @@ TIMEFRAMES = [
 
 # Interval string → milliseconds per candle
 _INTERVAL_MS = {
+    "1m":   1 * 60 * 1000,
+    "5m":   5 * 60 * 1000,
     "15m": 15 * 60 * 1000,
     "30m": 30 * 60 * 1000,
     "1h":  60 * 60 * 1000,

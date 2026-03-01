@@ -13,6 +13,13 @@ from src.database import Trade, get_session
 logger = logging.getLogger(__name__)
 
 
+def calc_pnl(side: str, entry_price: float, exit_price: float, size_usd: float) -> float:
+    """Calculate P&L in USD for a closed position."""
+    if side == "long":
+        return (exit_price - entry_price) / entry_price * size_usd
+    return (entry_price - exit_price) / entry_price * size_usd
+
+
 def get_open_trade():
     """Return the currently open Trade, or None."""
     with get_session() as session:
@@ -50,10 +57,7 @@ def close_expired_positions():
                     logger.info(f"[DRY RUN] Would close trade_id={trade.id}")
                 else:
                     exit_price = _close_position(trade)
-                    if trade.side == "long":
-                        pnl = (exit_price - trade.entry_price) / trade.entry_price * trade.size_usd
-                    else:
-                        pnl = (trade.entry_price - exit_price) / trade.entry_price * trade.size_usd
+                    pnl = calc_pnl(trade.side, trade.entry_price, exit_price, trade.size_usd)
 
                 trade.exit_price = exit_price
                 trade.exit_time = datetime.utcnow()
