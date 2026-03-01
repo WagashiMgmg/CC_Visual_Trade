@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # Safety
     dry_run: bool = True
 
+    # Discord
+    discord_bot_token: str = ""
+    discord_channel_id: str = ""
+
     # Internals (not from .env)
     candle_count: int = 100
     limit_order_timeout_secs: int = 30

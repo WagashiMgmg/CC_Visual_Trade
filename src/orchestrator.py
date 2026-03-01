@@ -11,6 +11,7 @@ from datetime import datetime
 
 from src.config import settings
 from src.database import Cycle, Trade, get_session
+from src.notify import send_discord
 from src.trader import calc_pnl
 
 logger = logging.getLogger(__name__)
@@ -170,6 +171,18 @@ def run_cycle(charts: list[tuple[str, str, str]], open_trade: Trade | None = Non
     except Exception as e:
         logger.error(f"Claude Code error: {e}")
         claude_output = "DECISION: HOLD\nREASON: 予期しないエラーが発生しました。"
+
+    if "OAuth token has expired" in claude_output or "authentication_error" in claude_output:
+        logger.error("Claude OAuth token expired — sending Discord alert")
+        send_discord(
+            title="⚠️ CC Visual Trade — 認証エラー",
+            message=(
+                "Claude の OAuth トークンが期限切れです。\n\n"
+                "`claude auth login` でホスト側を再認証してください。\n\n"
+                "または `.env` に `ANTHROPIC_API_KEY` を設定すると恒久的に解決します。"
+            ),
+            color=0xFF0000,
+        )
 
     parsed = _parse_response(claude_output)
     logger.info(f"Decision: {parsed['decision']} | Reason: {parsed['reason'][:100]}")
