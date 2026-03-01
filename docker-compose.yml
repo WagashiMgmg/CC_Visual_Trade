@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    env_file: .env
+    volumes:
+      - ./charts:/app/charts
+      - ./data:/app/data
+      # Mount Claude Code auth from host (read-only)
+      - ${HOME}/.claude:/root/.claude:ro
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

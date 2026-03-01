@@ -1,0 +1,22 @@
+# Secrets
+.env
+
+# Generated data
+data/
+charts/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+*.swp

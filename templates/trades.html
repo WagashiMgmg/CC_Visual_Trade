@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% set page = "trades" %}
+
+{% block content %}
+<div class="card">
+  <div class="card-label">Trade History ({{ trades | length }} trades)</div>
+  {% if trades %}
+    <table class="table table-full">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Coin</th>
+          <th>Side</th>
+          <th>Entry Time</th>
+          <th>Entry Price</th>
+          <th>Exit Price</th>
+          <th>Qty</th>
+          <th>Size USD</th>
+          <th>Duration</th>
+          <th>P&L</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in trades %}
+        <tr>
+          <td class="mono small muted">{{ t.id }}</td>
+          <td><strong>{{ t.coin }}</strong></td>
+          <td>
+            <span class="badge badge-{{ t.side }}">{{ t.side | upper }}</span>
+          </td>
+          <td class="mono small">{{ t.entry_time }}</td>
+          <td class="mono">${{ "{:,.2f}".format(t.entry_price) }}</td>
+          <td class="mono">
+            {% if t.exit_price %}${{ "{:,.2f}".format(t.exit_price) }}{% else %}—{% endif %}
+          </td>
+          <td class="mono small">{{ t.qty }}</td>
+          <td class="mono small">${{ "{:,.0f}".format(t.size_usd) }}</td>
+          <td class="mono small muted">{{ t.duration or '—' }}</td>
+          <td class="mono {% if t.pnl_usd and t.pnl_usd >= 0 %}text-green{% elif t.pnl_usd %}text-red{% endif %}">
+            {% if t.pnl_usd is not none %}
+              {% if t.pnl_usd >= 0 %}+{% endif %}${{ "{:,.2f}".format(t.pnl_usd) }}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <span class="badge-status badge-status-{{ t.status }}">{{ t.status }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="muted" style="padding:2rem;text-align:center;">No trades yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

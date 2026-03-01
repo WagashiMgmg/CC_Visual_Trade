@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CC Visual Trade</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">CC Visual Trade</span>
+      </div>
+      <nav class="nav">
+        <a href="/" class="nav-link {% if page == 'index' %}active{% endif %}">Dashboard</a>
+        <a href="/trades" class="nav-link {% if page == 'trades' %}active{% endif %}">Trades</a>
+      </nav>
+      <div id="live-dot" class="live-dot" title="Live"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>
+    // Blink the live dot every 5s to show connection
+    const dot = document.getElementById('live-dot');
+    setInterval(() => {
+      dot.classList.toggle('blink');
+    }, 1000);
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

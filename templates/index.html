@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% set page = "index" %}
+
+{% block content %}
+<!-- Top cards row -->
+<div class="grid grid-3">
+
+  <!-- Current Position -->
+  <div class="card {% if open_trade %}card-{{ open_trade.side }}{% endif %}">
+    <div class="card-label">Current Position</div>
+    {% if open_trade %}
+      <div class="position-side side-{{ open_trade.side }}">
+        {{ open_trade.side | upper }} {{ open_trade.coin }}
+      </div>
+      <div class="position-detail">
+        <span class="label">Entry</span>
+        <span class="value">${{ "{:,.2f}".format(open_trade.entry_price) }}</span>
+      </div>
+      <div class="position-detail">
+        <span class="label">Size</span>
+        <span class="value">${{ "{:,.0f}".format(open_trade.size_usd) }}</span>
+      </div>
+      <div class="position-detail">
+        <span class="label">Qty</span>
+        <span class="value">{{ open_trade.qty }}</span>
+      </div>
+      <div class="position-detail">
+        <span class="label">Opened</span>
+        <span class="value">{{ open_trade.entry_time }}</span>
+      </div>
+      <div class="position-detail">
+        <span class="label">Elapsed</span>
+        <span class="value mono" id="elapsed">{{ open_trade.elapsed }}</span>
+      </div>
+      <div class="position-detail">
+        <span class="label">Close in</span>
+        <span class="value mono text-warn" id="close-in">{{ open_trade.close_in }}</span>
+      </div>
+    {% else %}
+      <div class="no-position">No open position</div>
+      <div class="no-position-sub">Waiting for next cycle...</div>
+    {% endif %}
+  </div>
+
+  <!-- Latest AI Decision -->
+  <div class="card">
+    <div class="card-label">Latest AI Decision</div>
+    {% if latest_cycle %}
+      <div class="decision-badge decision-{{ (latest_cycle.decision or 'HOLD') | lower }}">
+        {{ latest_cycle.decision or 'HOLD' }}
+      </div>
+      <div class="decision-reason">{{ latest_cycle.reason or '—' }}</div>
+      <div class="cycle-time">{{ latest_cycle.timestamp }}</div>
+    {% else %}
+      <div class="no-position">No cycles yet</div>
+    {% endif %}
+  </div>
+
+  <!-- Stats -->
+  <div class="card">
+    <div class="card-label">Statistics</div>
+    <div class="stat-row">
+      <span class="label">Total Trades</span>
+      <span class="value">{{ stats.total_trades }}</span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Wins</span>
+      <span class="value text-green">{{ stats.wins }}</span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Win Rate</span>
+      <span class="value {% if stats.win_rate >= 50 %}text-green{% else %}text-red{% endif %}">
+        {{ stats.win_rate }}%
+      </span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Total P&L</span>
+      <span class="value {% if stats.total_pnl >= 0 %}text-green{% else %}text-red{% endif %}">
+        {% if stats.total_pnl >= 0 %}+{% endif %}${{ "{:,.2f}".format(stats.total_pnl) }}
+      </span>
+    </div>
+  </div>
+
+</div><!-- /grid-3 -->
+
+<!-- Chart -->
+<div class="card chart-card">
+  <div class="card-label">
+    Latest Chart
+    {% if latest_chart_url %}
+      <a href="{{ latest_chart_url }}" target="_blank" class="chart-link">open full size ↗</a>
+    {% endif %}
+  </div>
+  {% if latest_chart_url %}
+    <img id="chart-img" src="{{ latest_chart_url }}" alt="Latest chart" class="chart-img">
+  {% else %}
+    <div class="no-chart">No chart generated yet. Waiting for first cycle...</div>
+  {% endif %}
+</div>
+
+<!-- Cycle log + Recent trades (2 col) -->
+<div class="grid grid-2">
+
+  <!-- Recent Cycles -->
+  <div class="card">
+    <div class="card-label">Recent Cycles</div>
+    {% if recent_cycles %}
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Decision</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in recent_cycles %}
+          <tr>
+            <td class="mono small">{{ c.timestamp }}</td>
+            <td>
+              <span class="badge badge-{{ (c.decision or 'hold') | lower }}">
+                {{ c.decision or '—' }}
+              </span>
+            </td>
+            <td class="small muted">{{ c.reason[:80] }}{% if c.reason|length > 80 %}…{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="muted small">No cycles yet.</div>
+    {% endif %}
+  </div>
+
+  <!-- Recent Trades -->
+  <div class="card">
+    <div class="card-label">Recent Trades <a href="/trades" class="card-link">all →</a></div>
+    {% if recent_trades %}
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Side</th>
+            <th>Entry</th>
+            <th>Exit</th>
+            <th>P&L</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in recent_trades %}
+          <tr>
+            <td class="mono small">{{ t.entry_time }}</td>
+            <td>
+              <span class="badge badge-{{ t.side }}">{{ t.side | upper }}</span>
+            </td>
+            <td class="mono small">${{ "{:,.1f}".format(t.entry_price) }}</td>
+            <td class="mono small">
+              {% if t.exit_price %}${{ "{:,.1f}".format(t.exit_price) }}{% else %}—{% endif %}
+            </td>
+            <td class="mono small {% if t.pnl_usd and t.pnl_usd >= 0 %}text-green{% elif t.pnl_usd %}text-red{% endif %}">
+              {% if t.pnl_usd is not none %}
+                {% if t.pnl_usd >= 0 %}+{% endif %}${{ "{:,.2f}".format(t.pnl_usd) }}
+              {% elif t.status == 'open' %}
+                <span class="badge-open">OPEN</span>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="muted small">No trades yet.</div>
+    {% endif %}
+  </div>
+
+</div><!-- /grid-2 -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Poll /api/status every 5 seconds to refresh data
+  async function refreshStatus() {
+    try {
+      const r = await fetch('/api/status');
+      const data = await r.json();
+
+      // Update chart if changed
+      if (data.latest_chart_url) {
+        const img = document.getElementById('chart-img');
+        if (img && img.src !== window.location.origin + data.latest_chart_url) {
+          img.src = data.latest_chart_url + '?t=' + Date.now();
+        }
+      }
+    } catch (e) {
+      console.warn('Status poll failed:', e);
+    }
+  }
+  setInterval(refreshStatus, 5000);
+</script>
+{% endblock %}
