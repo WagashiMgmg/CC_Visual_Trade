@@ -81,7 +81,10 @@ def _plot_chart(df: pd.DataFrame, coin: str, title: str, out_path: str) -> None:
 
     add_plots = [
         mpf.make_addplot(df["SMA20"], color="#ff9900", width=1.5, label="SMA20"),
-        mpf.make_addplot(df["SMA50"], color="#58a6ff", width=1.5, label="SMA50"),
+    ]
+    if df["SMA50"].notna().any():
+        add_plots.append(mpf.make_addplot(df["SMA50"], color="#58a6ff", width=1.5, label="SMA50"))
+    add_plots += [
         mpf.make_addplot(df["RSI"], panel=2, color="#bc8cff", width=1.2,
                          ylabel="RSI", ylim=(0, 100)),
         mpf.make_addplot([70] * len(df), panel=2, color="#f85149", linestyle="--", width=0.8),
@@ -130,8 +133,8 @@ def generate_multi_tf_charts(coin: str) -> list[tuple[str, str, str]]:
     for interval, count, label in TIMEFRAMES:
         try:
             df = fetch_candles(coin, interval, count)
-            if df.empty:
-                logger.warning(f"No data for {interval}, skipping")
+            if df.empty or len(df) < 20:
+                logger.warning(f"Not enough data for {interval} ({len(df)} candles), skipping")
                 continue
             out_path = f"/app/charts/{coin}_{interval}_{ts}.png"
             title = f"{coin}/USD  {label}  |  SMA20 (orange) SMA50 (blue) RSI (purple)"

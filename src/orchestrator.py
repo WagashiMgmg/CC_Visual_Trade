@@ -14,12 +14,16 @@ from src.database import Cycle, get_session
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_PROMPT = """\
+_CONTEXT_FILE = "/app/prompt/context.md"
+
+_PROMPT_TEMPLATE = """\
+{context}
+
+---
+
 以下の{count}つのチャートを Read ツールで開いてください:
 
 {chart_list}
-
-各チャートには SMA20 (橙)・SMA50 (青)・RSI (紫)・出来高 が表示されています。
 
 チャートを見てトレード判断をしてください。
 
@@ -32,6 +36,15 @@ CLAUDE_PROMPT = """\
 DECISION: LONG or SHORT or HOLD
 REASON: （日本語で理由を記述）
 """
+
+
+def _load_context() -> str:
+    try:
+        with open(_CONTEXT_FILE) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        logger.warning(f"Context file not found: {_CONTEXT_FILE}")
+        return ""
 
 
 def _build_chart_list(charts: list[tuple[str, str, str]]) -> str:
@@ -64,10 +77,10 @@ def run_cycle(charts: list[tuple[str, str, str]]) -> dict:
     """
     coin = settings.trading_coin
     chart_list_str = _build_chart_list(charts)
-    prompt = CLAUDE_PROMPT.format(
+    prompt = _PROMPT_TEMPLATE.format(
+        context=_load_context(),
         count=len(charts),
         chart_list=chart_list_str,
-        coin=coin,
     )
 
     logger.info(f"Calling Claude Code CLI with {len(charts)} timeframe charts")

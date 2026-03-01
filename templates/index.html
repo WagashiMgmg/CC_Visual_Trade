@@ -83,18 +83,26 @@
 
 </div><!-- /grid-3 -->
 
-<!-- Chart -->
-<div class="card chart-card">
-  <div class="card-label">
-    Latest Chart
-    {% if latest_chart_url %}
-      <a href="{{ latest_chart_url }}" target="_blank" class="chart-link">open full size ↗</a>
-    {% endif %}
-  </div>
-  {% if latest_chart_url %}
-    <img id="chart-img" src="{{ latest_chart_url }}" alt="Latest chart" class="chart-img">
+<!-- Multi-timeframe Chart Grid -->
+<div class="card chart-grid-card">
+  <div class="card-label">Charts — All Timeframes</div>
+  {% if all_charts %}
+    <div class="chart-grid" id="chart-grid">
+      {% for c in all_charts %}
+      <div class="chart-item">
+        <div class="chart-item-label">
+          {{ c.interval }}
+          <a href="{{ c.url }}" target="_blank" class="chart-link">↗</a>
+        </div>
+        <img class="chart-thumb"
+             data-interval="{{ c.interval }}"
+             src="{{ c.url }}"
+             alt="{{ c.interval }} chart">
+      </div>
+      {% endfor %}
+    </div>
   {% else %}
-    <div class="no-chart">No chart generated yet. Waiting for first cycle...</div>
+    <div class="no-chart">No charts generated yet. Waiting for first cycle...</div>
   {% endif %}
 </div>
 
@@ -184,11 +192,20 @@
       const r = await fetch('/api/status');
       const data = await r.json();
 
-      // Update chart if changed
-      if (data.latest_chart_url) {
-        const img = document.getElementById('chart-img');
-        if (img && img.src !== window.location.origin + data.latest_chart_url) {
-          img.src = data.latest_chart_url + '?t=' + Date.now();
+      // Update chart grid if new charts arrived
+      if (data.all_charts && data.all_charts.length > 0) {
+        const grid = document.getElementById('chart-grid');
+        if (grid) {
+          data.all_charts.forEach(c => {
+            const img = grid.querySelector(`img[data-interval="${c.interval}"]`);
+            if (img) {
+              const newSrc = c.url + '?t=' + Date.now();
+              // Only reload if the base URL changed
+              if (!img.src.includes(c.url.split('?')[0].split('/').pop())) {
+                img.src = newSrc;
+              }
+            }
+          });
         }
       }
     } catch (e) {

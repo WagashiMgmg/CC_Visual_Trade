@@ -85,6 +85,8 @@ def _get_recent_trades(limit=20):
                 "id": t.id,
                 "coin": t.coin,
                 "side": t.side,
+                "size_usd": t.size_usd,
+                "qty": t.qty,
                 "entry_price": t.entry_price,
                 "exit_price": t.exit_price,
                 "pnl_usd": t.pnl_usd,
@@ -95,12 +97,28 @@ def _get_recent_trades(limit=20):
         return result
 
 
-def _get_latest_chart_url():
+_TF_ORDER = ["15m", "30m", "1h", "1d", "1w", "1M"]
+
+
+def _get_all_chart_urls() -> list[dict]:
+    """Return charts from the latest cycle, ordered by timeframe."""
     charts_dir = Path("/app/charts")
     pngs = sorted(charts_dir.glob("*.png"), key=os.path.getmtime, reverse=True)
-    if pngs:
-        return f"/charts/{pngs[0].name}"
-    return None
+    if not pngs:
+        return []
+    latest_ts = os.path.getmtime(pngs[0])
+    cycle: dict[str, str] = {}
+    for png in pngs:
+        if os.path.getmtime(png) >= latest_ts - 60:
+            for tf in _TF_ORDER:
+                if f"_{tf}_" in png.name and tf not in cycle:
+                    cycle[tf] = f"/charts/{png.name}"
+    return [{"interval": tf, "url": cycle[tf]} for tf in _TF_ORDER if tf in cycle]
+
+
+def _get_latest_chart_url():
+    urls = _get_all_chart_urls()
+    return urls[0]["url"] if urls else None
 
 
 def _get_recent_cycles(limit=10):
@@ -132,7 +150,7 @@ async def index(request: Request):
             "request": request,
             "open_trade": _get_open_trade(),
             "latest_cycle": _get_latest_cycle(),
-            "latest_chart_url": _get_latest_chart_url(),
+            "all_charts": _get_all_chart_urls(),
             "stats": _get_stats(),
             "recent_trades": _get_recent_trades(10),
             "recent_cycles": _get_recent_cycles(10),
@@ -166,5 +184,5 @@ async def api_status():
         "open_trade": _get_open_trade(),
         "latest_cycle": _get_latest_cycle(),
         "stats": _get_stats(),
-        "latest_chart_url": _get_latest_chart_url(),
+        "all_charts": _get_all_chart_urls(),
     }
