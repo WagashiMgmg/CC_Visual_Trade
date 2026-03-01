@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # Hyperliquid
     hyperliquid_private_key: str = ""
     hyperliquid_account_address: str = ""
+    testnet: bool = False
 
     # Trading
     trading_coin: str = "BTC"
@@ -28,6 +29,11 @@ class Settings(BaseSettings):
     limit_order_timeout_secs: int = 30
     close_limit_timeout_secs: int = 60
     position_max_duration_secs: int = 3600  # 1 hour
+
+    @property
+    def api_url(self) -> str:
+        from hyperliquid.utils import constants
+        return constants.TESTNET_API_URL if self.testnet else constants.MAINNET_API_URL
 
 
 settings = Settings()

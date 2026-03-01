@@ -67,8 +67,7 @@ REASON: （日本語で理由を記述）
 def _fetch_mid(coin: str) -> float:
     """Fetch current mid price from Hyperliquid."""
     from hyperliquid.info import Info
-    from hyperliquid.utils import constants
-    info = Info(constants.MAINNET_API_URL, skip_ws=True)
+    info = Info(settings.api_url, skip_ws=True)
     return float(info.all_mids()[coin])
 
 

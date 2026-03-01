@@ -20,8 +20,7 @@ def run():
 
         if settings.dry_run:
             from hyperliquid.info import Info
-            from hyperliquid.utils import constants
-            info = Info(constants.MAINNET_API_URL, skip_ws=True)
+            info = Info(settings.api_url, skip_ws=True)
             exit_price = float(info.all_mids()[trade.coin])
         else:
             from src.trader import _close_position

@@ -14,7 +14,9 @@ matplotlib.use("Agg")
 
 logger = logging.getLogger(__name__)
 
-HYPERLIQUID_API = "https://api.hyperliquid.xyz/info"
+def _api_url() -> str:
+    from src.config import settings
+    return settings.api_url + "/info"
 
 # Timeframes to generate: (interval, candle_count, label)
 TIMEFRAMES = [
@@ -59,7 +61,7 @@ def fetch_candles(coin: str, interval: str, count: int) -> pd.DataFrame:
         "type": "candleSnapshot",
         "req": {"coin": coin, "interval": interval, "startTime": start_ms, "endTime": end_ms},
     }
-    resp = requests.post(HYPERLIQUID_API, json=payload, timeout=15)
+    resp = requests.post(_api_url(), json=payload, timeout=15)
     resp.raise_for_status()
 
     rows = [

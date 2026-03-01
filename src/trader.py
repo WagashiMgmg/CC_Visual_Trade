@@ -85,10 +85,10 @@ def _close_position(trade: Trade) -> float:
     from hyperliquid.utils import constants
 
     account = eth_account.Account.from_key(settings.hyperliquid_private_key)
-    info = Info(constants.MAINNET_API_URL, skip_ws=True)
+    info = Info(settings.api_url, skip_ws=True)
     exchange = Exchange(
         account,
-        constants.MAINNET_API_URL,
+        settings.api_url,
         account_address=settings.hyperliquid_account_address,
     )
 

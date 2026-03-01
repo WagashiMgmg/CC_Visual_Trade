@@ -30,8 +30,7 @@ def run():
     if settings.dry_run:
         import eth_account
         from hyperliquid.info import Info
-        from hyperliquid.utils import constants
-        info = Info(constants.MAINNET_API_URL, skip_ws=True)
+        info = Info(settings.api_url, skip_ws=True)
         mid = float(info.all_mids()[coin])
         qty = round(size_usd / mid, 6)
         logger.info(f"[DRY RUN] Would place LONG {coin} ${size_usd} @ {mid}")
@@ -54,11 +53,10 @@ def run():
     import eth_account
     from hyperliquid.exchange import Exchange
     from hyperliquid.info import Info
-    from hyperliquid.utils import constants
 
     account = eth_account.Account.from_key(settings.hyperliquid_private_key)
-    info = Info(constants.MAINNET_API_URL, skip_ws=True)
-    exchange = Exchange(account, constants.MAINNET_API_URL,
+    info = Info(settings.api_url, skip_ws=True)
+    exchange = Exchange(account, settings.api_url,
                         account_address=settings.hyperliquid_account_address)
 
     # Set leverage
