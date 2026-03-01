@@ -61,11 +61,13 @@ cp .env.example .env
 `.env` を編集:
 
 ```env
-HYPERLIQUID_PRIVATE_KEY=0x_your_private_key
-HYPERLIQUID_ACCOUNT_ADDRESS=0x_your_wallet_address
+HYPERLIQUID_PRIVATE_KEY=0x_your_api_wallet_private_key
+HYPERLIQUID_ACCOUNT_ADDRESS=0x_your_api_wallet_address
+HYPERLIQUID_MAIN_ADDRESS=0x_your_main_account_address
 TRADING_COIN=BTC
 POSITION_SIZE_USD=100
 LEVERAGE=3
+TESTNET=false       # true でテストネット使用
 DRY_RUN=true        # 最初は true で動作確認
 DASHBOARD_PORT=8080
 ```
@@ -128,6 +130,23 @@ CC_Visual_Trade/
 ```
 prompt/context.md  ← ここを編集
 ```
+
+## テスト
+
+Hyperliquid テストネットへの実注文を含む統合テストです。`.env` に `TESTNET=true` を設定した状態で実行してください。
+
+```bash
+# コンテナ内で実行
+docker compose exec app python -m pytest tests/ -v -s
+```
+
+| テストクラス | 内容 |
+|-------------|------|
+| `TestPnlCalc` | `calc_pnl()` のユニットテスト（ネットワーク不要） |
+| `TestMarketData` | mid価格・OHLCV取得・`_fetch_mid` の疎通確認 |
+| `TestOrderPlacement` | 指値注文→キャンセル、成行エントリー→GTC決済注文の実注文テスト |
+
+> **注意**: `TestOrderPlacement` はテストネットに実際の注文を発行します（〜$11相当）。`TESTNET=true` でない場合はテスト開始時に自動終了します。
 
 ## 注意事項
 
