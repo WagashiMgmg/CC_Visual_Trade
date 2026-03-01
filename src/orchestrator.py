@@ -86,7 +86,7 @@ def run_cycle(chart_path: str) -> dict:
                 "claude",
                 "-p", prompt,
                 "--allowedTools", "Read,Bash",
-                "--dangerouslySkipPermissions",
+                "--dangerously-skip-permissions",
             ],
             capture_output=True,
             text=True,
