@@ -28,3 +28,6 @@ pydantic-settings>=2.2.1
 
 # Markdown rendering
 markdown>=3.5
+
+# Testing
+pytest>=8.0

@@ -8,6 +8,9 @@ services:
       - ./charts:/app/charts
       - ./data:/app/data
       - ./prompt:/app/prompt
+      - ./src:/app/src
+      - ./script:/app/script
+      - ./tests:/app/tests
       - ./static:/app/static
       - ./templates:/app/templates
       # Mount Claude Code auth from host (read-only)
