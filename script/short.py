@@ -28,21 +28,27 @@ def run():
     size_usd = settings.position_size_usd
 
     if settings.dry_run:
-        logger.info(f"[DRY RUN] Would place SHORT {coin} ${size_usd}")
+        import eth_account
+        from hyperliquid.info import Info
+        from hyperliquid.utils import constants
+        info = Info(constants.MAINNET_API_URL, skip_ws=True)
+        mid = float(info.all_mids()[coin])
+        qty = round(size_usd / mid, 6)
+        logger.info(f"[DRY RUN] Would place SHORT {coin} ${size_usd} @ {mid}")
         with get_session() as session:
             trade = Trade(
                 coin=coin,
                 side="short",
                 size_usd=size_usd,
-                qty=round(size_usd / 95000, 6),  # placeholder price
-                entry_price=95000.0,
+                qty=qty,
+                entry_price=mid,
                 entry_order_id=None,
                 entry_time=datetime.utcnow(),
                 status="open",
             )
             session.add(trade)
             session.commit()
-        print(f"SHORT recorded (DRY RUN): entry_price=95000.0 trade_id={trade.id}")
+        print(f"SHORT recorded (DRY RUN): entry_price={mid} trade_id={trade.id}")
         return
 
     import eth_account
