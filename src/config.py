@@ -10,7 +10,8 @@ class Settings(BaseSettings):
 
     # Hyperliquid
     hyperliquid_private_key: str = ""
-    hyperliquid_account_address: str = ""
+    hyperliquid_account_address: str = ""   # API wallet address (signing key)
+    hyperliquid_main_address: str = ""      # Main account address (holds funds / positions)
     testnet: bool = False
 
     # Trading

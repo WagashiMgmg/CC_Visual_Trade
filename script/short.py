@@ -57,7 +57,7 @@ def run():
     account = eth_account.Account.from_key(settings.hyperliquid_private_key)
     info = Info(settings.api_url, skip_ws=True)
     exchange = Exchange(account, settings.api_url,
-                        account_address=settings.hyperliquid_account_address)
+                        account_address=settings.hyperliquid_main_address)
 
     # Set leverage
     exchange.update_leverage(settings.leverage, coin, is_cross=True)
@@ -95,7 +95,7 @@ def run():
         deadline = time.time() + settings.limit_order_timeout_secs
         while time.time() < deadline:
             time.sleep(3)
-            open_orders = info.open_orders(settings.hyperliquid_account_address)
+            open_orders = info.open_orders(settings.hyperliquid_main_address)
             if not any(o.get("oid") == oid for o in open_orders):
                 filled = True
                 logger.info("Limit order filled!")

@@ -89,7 +89,7 @@ def _close_position(trade: Trade) -> float:
     exchange = Exchange(
         account,
         settings.api_url,
-        account_address=settings.hyperliquid_account_address,
+        account_address=settings.hyperliquid_main_address,
     )
 
     coin = trade.coin
@@ -127,7 +127,7 @@ def _close_position(trade: Trade) -> float:
         deadline = time.time() + settings.close_limit_timeout_secs
         while time.time() < deadline:
             time.sleep(5)
-            open_orders = info.open_orders(settings.hyperliquid_account_address)
+            open_orders = info.open_orders(settings.hyperliquid_main_address)
             if not any(o.get("oid") == oid for o in open_orders):
                 logger.info("Limit close filled!")
                 # Approximate fill price (actual fill may differ slightly)
