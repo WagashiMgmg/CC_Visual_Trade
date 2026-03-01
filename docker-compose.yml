@@ -8,7 +8,8 @@ services:
       - ./charts:/app/charts
       - ./data:/app/data
       # Mount Claude Code auth from host (read-only)
-      - ${HOME}/.claude:/root/.claude:ro
+      - ${HOME}/.claude:/home/appuser/.claude
+      - ${HOME}/.claude.json:/home/appuser/.claude.json:ro
     restart: unless-stopped
     logging:
       driver: "json-file"

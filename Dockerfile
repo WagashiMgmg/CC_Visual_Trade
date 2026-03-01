@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Create non-root user matching host uid=1000 (avoids --dangerously-skip-permissions root restriction)
+RUN useradd -m -u 1000 appuser
+
 WORKDIR /app
 
 # Python dependencies
@@ -20,11 +23,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Application code
 COPY . .
 
-# Create runtime directories
-RUN mkdir -p charts data
+# Create runtime directories and set ownership
+RUN mkdir -p charts data && chown -R appuser:appuser /app
 
 # Make scripts executable
 RUN chmod +x script/long.py script/short.py
+
+USER appuser
 
 EXPOSE 8080
 

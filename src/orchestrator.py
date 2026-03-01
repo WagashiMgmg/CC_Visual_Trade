@@ -79,7 +79,7 @@ def run_cycle(charts: list[tuple[str, str, str]]) -> dict:
                 "claude",
                 "-p", prompt,
                 "--allowedTools", "Read,Bash",
-                "--dangerously-skip-permissions",
+                "--permission-mode", "bypassPermissions",
             ],
             capture_output=True,
             text=True,

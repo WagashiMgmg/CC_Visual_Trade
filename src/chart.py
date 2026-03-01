@@ -18,12 +18,12 @@ HYPERLIQUID_API = "https://api.hyperliquid.xyz/info"
 
 # Timeframes to generate: (interval, candle_count, label)
 TIMEFRAMES = [
-    ("15m",  100, "15分足  (約25時間)"),
-    ("30m",   96, "30分足  (約2日)"),
-    ("1h",    72, "1時間足 (約3日)"),
-    ("1d",    60, "日足    (約2ヶ月)"),
-    ("1w",    52, "週足    (約1年)"),
-    ("1M",    24, "月足    (約2年)"),
+    ("15m",  100, "15min (~25h)"),
+    ("30m",   96, "30min (~2d)"),
+    ("1h",    72, "1h    (~3d)"),
+    ("1d",    60, "1d    (~2mo)"),
+    ("1w",    52, "1w    (~1yr)"),
+    ("1M",    24, "1M    (~2yr)"),
 ]
 
 # Interval string → milliseconds per candle
@@ -106,12 +106,24 @@ def _plot_chart(df: pd.DataFrame, coin: str, title: str, out_path: str) -> None:
     plt.close(fig)
 
 
+def _cleanup_old_charts(coin: str) -> None:
+    """Delete previous cycle's chart PNGs for this coin."""
+    charts_dir = "/app/charts"
+    for fname in os.listdir(charts_dir):
+        if fname.startswith(f"{coin}_") and fname.endswith(".png"):
+            try:
+                os.remove(os.path.join(charts_dir, fname))
+            except OSError:
+                pass
+
+
 def generate_multi_tf_charts(coin: str) -> list[tuple[str, str, str]]:
     """
     Generate charts for all timeframes.
     Returns list of (interval, label, file_path).
     """
     os.makedirs("/app/charts", exist_ok=True)
+    _cleanup_old_charts(coin)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     results = []
 
@@ -122,7 +134,7 @@ def generate_multi_tf_charts(coin: str) -> list[tuple[str, str, str]]:
                 logger.warning(f"No data for {interval}, skipping")
                 continue
             out_path = f"/app/charts/{coin}_{interval}_{ts}.png"
-            title = f"{coin}/USD  {label}"
+            title = f"{coin}/USD  {label}  |  SMA20 (orange) SMA50 (blue) RSI (purple)"
             _plot_chart(df, coin, title, out_path)
             logger.info(f"Chart saved: {out_path}")
             results.append((interval, label, out_path))
