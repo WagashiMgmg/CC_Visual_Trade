@@ -2,6 +2,8 @@
 
 Hyperliquid の **6つの時間軸チャート** を **Claude Code CLI** に画像分析させ、`LONG / SHORT / HOLD` を自動判断して執行する自動売買 bot。
 
+![Dashboard](docs/dashboard.png)
+
 ## アーキテクチャ
 
 ```
