@@ -66,7 +66,7 @@ def run():
     mids = info.all_mids()
     mid = float(mids[coin])
     qty = round(size_usd / mid, 6)
-    limit_px = round(mid, 1)
+    limit_px = round(mid, 0)
 
     logger.info(f"Placing SHORT limit: {coin} qty={qty} px={limit_px}")
     order_result = exchange.order(coin, False, qty, limit_px, {"limit": {"tif": "Gtc"}})

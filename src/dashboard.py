@@ -99,6 +99,24 @@ def _get_recent_trades(limit=20):
         return result
 
 
+def _get_pnl_series():
+    cumulative = 0.0
+    labels = ["Start"]
+    values = [0.0]
+    with get_session() as session:
+        rows = (
+            session.query(Trade.pnl_usd, Trade.exit_time)
+            .filter(Trade.status == "closed", Trade.pnl_usd.isnot(None))
+            .order_by(Trade.exit_time)
+            .all()
+        )
+        for pnl, exit_time in rows:
+            cumulative = round(cumulative + (pnl or 0), 2)
+            labels.append(exit_time.strftime("%m/%d %H:%M") if exit_time else "")
+            values.append(cumulative)
+    return {"labels": labels, "values": values}
+
+
 _TF_ORDER = ["1m", "5m", "15m", "30m", "1h", "1d", "1w", "1M"]
 
 
@@ -156,6 +174,7 @@ async def index(request: Request):
             "stats": _get_stats(),
             "recent_trades": _get_recent_trades(10),
             "recent_cycles": _get_recent_cycles(10),
+            "pnl_series": _get_pnl_series(),
         },
     )
 
@@ -177,6 +196,11 @@ async def serve_chart(filename: str):
     if os.path.isfile(path):
         return FileResponse(path, media_type="image/png")
     return HTMLResponse("Not found", status_code=404)
+
+
+@router.get("/api/pnl")
+async def api_pnl():
+    return _get_pnl_series()
 
 
 @router.get("/api/status")

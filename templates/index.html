@@ -83,6 +83,22 @@
 
 </div><!-- /grid-3 -->
 
+<!-- P&L Equity Curve -->
+{% if pnl_series['values'] | length > 1 %}
+<div class="card">
+  <div class="card-label">
+    Cumulative P&L
+    <span class="{% if pnl_series['values'][-1] >= 0 %}text-green{% else %}text-red{% endif %}">
+      {% set last = pnl_series['values'][-1] %}
+      {% if last >= 0 %}+{% endif %}${{ "{:,.2f}".format(last) }}
+    </span>
+  </div>
+  <div style="position:relative;height:160px;">
+    <canvas id="pnl-chart"></canvas>
+  </div>
+</div>
+{% endif %}
+
 <!-- Multi-timeframe Chart Grid -->
 <div class="card chart-grid-card">
   <div class="card-label">Charts — All Timeframes</div>
@@ -186,6 +202,39 @@
 
 {% block scripts %}
 <script>
+  // Initialize PnL equity curve chart
+  const pnlData = {{ pnl_series | tojson }};
+  if (pnlData.values.length > 1) {
+    const ctx = document.getElementById('pnl-chart').getContext('2d');
+    const last = pnlData.values[pnlData.values.length - 1];
+    const color = last >= 0 ? '#3fb950' : '#f85149';
+    const grad = ctx.createLinearGradient(0, 0, 0, 160);
+    grad.addColorStop(0, last >= 0 ? 'rgba(63,185,80,0.25)' : 'rgba(248,81,73,0.25)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: pnlData.labels,
+        datasets: [{ data: pnlData.values, borderColor: color, backgroundColor: grad,
+                     borderWidth: 2, pointRadius: pnlData.values.length <= 30 ? 3 : 0,
+                     pointHoverRadius: 5, fill: true, tension: 0.3 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => (c.parsed.y >= 0 ? '+' : '') + '$' + c.parsed.y.toFixed(2) } }
+        },
+        scales: {
+          x: { ticks: { color: '#8b949e', maxTicksLimit: 8, font: { size: 11 } }, grid: { color: '#21262d' } },
+          y: { ticks: { color: '#8b949e', font: { size: 11 },
+                        callback: v => (v >= 0 ? '+' : '') + '$' + v.toFixed(2) },
+               grid: { color: '#21262d' } }
+        }
+      }
+    });
+  }
+
   // Poll /api/status every 5 seconds to refresh data
   async function refreshStatus() {
     try {
