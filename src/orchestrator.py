@@ -1,7 +1,7 @@
 """
-Orchestrator: calls `claude -p` with the chart image path.
-Claude Code reads the chart, decides LONG/SHORT/HOLD, and executes
-the appropriate script via its Bash tool.
+Orchestrator: calls `claude -p` with multiple timeframe chart paths.
+Claude Code reads all charts, performs multi-timeframe analysis,
+decides LONG/SHORT/HOLD, and executes the appropriate script.
 """
 
 import logging
@@ -15,41 +15,42 @@ from src.database import Cycle, get_session
 logger = logging.getLogger(__name__)
 
 CLAUDE_PROMPT = """\
-あなたはプロのトレーダーです。
-まず Read ツールで以下のチャート画像ファイルを開いて分析してください: {chart_path}
+あなたはプロのトレーダーです。マルチタイムフレーム分析を行い、トレード判断をしてください。
 
-このチャートは {coin}/USD の15分足ローソクチャートです（直近100本 ≈ 約25時間分）。
-チャートには以下の指標が表示されています:
+以下の{count}つのチャートを **すべて** Read ツールで順番に開いて分析してください:
+
+{chart_list}
+
+各チャートには以下の指標が表示されています:
 - SMA20 (橙色): 20期間単純移動平均
 - SMA50 (青色): 50期間単純移動平均
 - RSI (紫色、下段): 14期間 RSI（赤破線=70 / 緑破線=30）
 - 出来高バー (中段)
 
-分析してトレード判断を行ってください:
-1. トレンドの方向性と強さ (SMAの傾きとクロス)
-2. RSIの水準 (70以上=買われ過ぎ/30以下=売られ過ぎ)
-3. 直近の価格アクション (サポート/レジスタンス、パターン)
-4. 出来高の変化
+【マルチタイムフレーム分析の手順】
+1. 長期 (月足・週足・日足) でトレンドの大局を把握する
+2. 中期 (1時間足・30分足) でエントリーゾーンを絞る
+3. 短期 (15分足) でエントリータイミングを判断する
+
+長期・中期・短期のトレンドが揃っている場合のみ強いシグナルと判断すること。
+方向感が一致しない場合は HOLD を選ぶこと。
 
 判断後、以下のアクションを必ず取ること:
-- LONG と判断した場合 → Bash ツールで `python /app/script/long.py` を実行すること
+- LONG  と判断した場合 → Bash ツールで `python /app/script/long.py` を実行すること
 - SHORT と判断した場合 → Bash ツールで `python /app/script/short.py` を実行すること
-- HOLD と判断した場合 → 何もしない
+- HOLD  と判断した場合 → 何もしない
 
 最後に必ず以下のフォーマットで出力すること:
-DECISION: LONG
-REASON: （日本語で2〜3文で理由を記述）
-
-または
-
-DECISION: SHORT
-REASON: （日本語で2〜3文で理由を記述）
-
-または
-
-DECISION: HOLD
-REASON: （日本語で2〜3文で理由を記述）
+DECISION: LONG or SHORT or HOLD
+REASON: （日本語で3〜5文。各タイムフレームの根拠を含めること）
 """
+
+
+def _build_chart_list(charts: list[tuple[str, str, str]]) -> str:
+    lines = []
+    for i, (interval, label, path) in enumerate(charts, 1):
+        lines.append(f"{i}. {label}: {path}")
+    return "\n".join(lines)
 
 
 def _parse_response(output: str) -> dict:
@@ -67,19 +68,23 @@ def _parse_response(output: str) -> dict:
     return {"decision": decision, "reason": reason}
 
 
-def run_cycle(chart_path: str) -> dict:
+def run_cycle(charts: list[tuple[str, str, str]]) -> dict:
     """
-    Run one trading cycle: call Claude Code CLI, parse response, record to DB.
+    Run one trading cycle with multi-timeframe charts.
+    charts: list of (interval, label, file_path) from generate_multi_tf_charts()
     Returns dict with 'decision' and 'reason'.
     """
     coin = settings.trading_coin
-    prompt = CLAUDE_PROMPT.format(chart_path=chart_path, coin=coin)
+    chart_list_str = _build_chart_list(charts)
+    prompt = CLAUDE_PROMPT.format(
+        count=len(charts),
+        chart_list=chart_list_str,
+        coin=coin,
+    )
 
-    logger.info(f"Calling Claude Code CLI with chart: {chart_path}")
+    logger.info(f"Calling Claude Code CLI with {len(charts)} timeframe charts")
 
     claude_output = ""
-    action_taken = "error"
-
     try:
         result = subprocess.run(
             [
@@ -90,14 +95,14 @@ def run_cycle(chart_path: str) -> dict:
             ],
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=300,   # 6枚読むので余裕を持たせる
             cwd="/app",
         )
         claude_output = result.stdout
         if result.stderr:
             logger.warning(f"Claude stderr: {result.stderr[:300]}")
     except subprocess.TimeoutExpired:
-        logger.error("Claude Code timed out after 180s")
+        logger.error("Claude Code timed out after 300s")
         claude_output = "DECISION: HOLD\nREASON: タイムアウトのためスキップしました。"
     except FileNotFoundError:
         logger.error("'claude' command not found. Is Claude Code CLI installed?")
@@ -107,18 +112,19 @@ def run_cycle(chart_path: str) -> dict:
         claude_output = "DECISION: HOLD\nREASON: 予期しないエラーが発生しました。"
 
     parsed = _parse_response(claude_output)
-    action_taken = parsed["decision"].lower()
+    logger.info(f"Decision: {parsed['decision']} | Reason: {parsed['reason'][:100]}")
 
-    logger.info(f"Decision: {parsed['decision']} | Reason: {parsed['reason'][:80]}")
+    # 15m チャートパスをダッシュボード表示用に保存
+    primary_chart = next((p for _, _, p in charts if "15m" in p), charts[0][2] if charts else "")
 
     with get_session() as session:
         cycle = Cycle(
             timestamp=datetime.utcnow(),
             coin=coin,
-            chart_path=chart_path,
+            chart_path=primary_chart,
             ai_decision=parsed["decision"],
             ai_reasoning=parsed["reason"],
-            action_taken=action_taken,
+            action_taken=parsed["decision"].lower(),
             claude_raw_output=claude_output[:5000],
         )
         session.add(cycle)

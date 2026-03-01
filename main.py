@@ -39,7 +39,7 @@ def trading_cycle():
     4. Record cycle in DB
     """
     from src.database import Trade, get_session
-    from src.chart import generate_chart
+    from src.chart import generate_multi_tf_charts
     from src.orchestrator import run_cycle
 
     # Skip if already in a position
@@ -51,13 +51,16 @@ def trading_cycle():
 
     logger.info("=== Trading cycle start ===")
     try:
-        chart_path = generate_chart(settings.trading_coin, settings.candle_count)
+        charts = generate_multi_tf_charts(settings.trading_coin)
+        if not charts:
+            logger.error("No charts generated, aborting cycle")
+            return
     except Exception as e:
         logger.error(f"Chart generation failed: {e}")
         return
 
     try:
-        result = run_cycle(chart_path)
+        result = run_cycle(charts)
         logger.info(f"Cycle complete: {result['decision']} — {result['reason'][:60]}")
     except Exception as e:
         logger.error(f"Orchestrator failed: {e}")
