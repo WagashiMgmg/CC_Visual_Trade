@@ -1,44 +1,46 @@
 # CC Visual Trade
 
-Hyperliquid の15分足チャートを **Claude Code CLI** に画像分析させ、`LONG / SHORT / HOLD` を自動判断して執行する自動売買 bot。
+Hyperliquid の **6つの時間軸チャート** を **Claude Code CLI** に画像分析させ、`LONG / SHORT / HOLD` を自動判断して執行する自動売買 bot。
 
 ## アーキテクチャ
 
 ```
 毎15分 (APScheduler)
   ↓
-1. Hyperliquid から15分足 100本取得 → mplfinance で PNG生成
-   (ローソク足 + SMA20/50 + RSI + 出来高)
+1. Hyperliquid から 6時間軸の OHLCV を取得 → mplfinance で PNG 生成
+   15m / 30m / 1h / 1d / 1w / 1M
+   (ローソク足 + SMA20 + SMA50 + RSI + 出来高)
   ↓
-2. claude -p "チャートを分析して..." --allowedTools Read,Bash
-   ├─ Claude が Read ツールで PNG を分析
-   ├─ LONG  → Bash: python script/long.py  (指値→タイムアウト→成り行き)
-   ├─ SHORT → Bash: python script/short.py (指値→タイムアウト→成り行き)
+2. claude -p "..." --allowedTools Read,Bash --permission-mode bypassPermissions
+   ├─ Claude が Read ツールで全チャートを分析
+   ├─ LONG  → Bash: python script/long.py  (指値 → 30秒 → 成り行き)
+   ├─ SHORT → Bash: python script/short.py (指値 → 30秒 → 成り行き)
    └─ HOLD  → 何もしない
   ↓
 3. 判断・実行結果を SQLite に記録
 
 毎30秒
-  → オープンポジションが1時間経過 → 指値決済 → タイムアウト → 成り行き決済
+  → オープンポジションが1時間経過 → 指値決済 → 60秒 → 成り行き決済
 ```
 
 ## 機能
 
-- **チャート生成**: SMA20/50・RSI・出来高付きのダークテーマ PNG
-- **AI判断**: Claude Code CLI がチャート画像を見て LONG/SHORT/HOLD を決定
-- **注文執行**: 指値優先 (手数料メリット) → 30秒未約定で成り行きフォールバック
-- **強制決済**: 1時間後に必ず決済 (指値60秒 → 成り行き)
+- **マルチタイムフレーム分析**: 15m〜月足の6枚を Claude に同時提示
+- **AI判断**: チャート画像から LONG / SHORT / HOLD を自律判断・実行
+- **注文執行**: 指値優先（メイカー手数料）→ 未約定で成り行きフォールバック
+- **強制決済**: 1時間後に必ず決済（指値60秒 → 成り行き）
+- **プロンプト外部管理**: `prompt/context.md` を編集するだけでAIへの指示を変更可能（rebuild 不要）
 - **ダッシュボード**: FastAPI + Jinja2 (ポート 8080)
-  - 現在ポジション・含み損益・決済カウントダウン
-  - 最新チャート画像
+  - 現在ポジション・決済カウントダウン
+  - 全時間軸チャートグリッド（3×2）
   - Claude の判断とその理由
-  - 取引履歴・勝率・累計P&L
+  - 取引履歴・勝率・累計 P&L
 
 ## 技術スタック
 
-| 役割 | ライブラリ |
-|------|-----------|
-| AI判断 | Claude Code CLI (`claude -p`) |
+| 役割 | 技術 |
+|------|------|
+| AI 判断 | Claude Code CLI (`claude -p`) |
 | チャート生成 | mplfinance + matplotlib |
 | 取引 | hyperliquid-python-sdk |
 | スケジューラ | APScheduler |
@@ -57,21 +59,22 @@ cp .env.example .env
 `.env` を編集:
 
 ```env
-HYPERLIQUID_PRIVATE_KEY=0x your_private_key
-HYPERLIQUID_ACCOUNT_ADDRESS=0x your_wallet_address
+HYPERLIQUID_PRIVATE_KEY=0x_your_private_key
+HYPERLIQUID_ACCOUNT_ADDRESS=0x_your_wallet_address
 TRADING_COIN=BTC
 POSITION_SIZE_USD=100
 LEVERAGE=3
-DRY_RUN=true   # 最初は true で動作確認
+DRY_RUN=true        # 最初は true で動作確認
+DASHBOARD_PORT=8080
 ```
 
 ### 2. Claude Code CLI の認証
 
-```bash
-claude auth login   # または gh auth login 後に claude setup
-```
+ホスト側で一度ログインすれば、認証情報が Docker コンテナに自動マウントされます。
 
-認証情報は `~/.claude/` に保存され、Docker コンテナにマウントされます。
+```bash
+claude auth login
+```
 
 ### 3. 起動
 
@@ -94,23 +97,34 @@ docker compose restart
 ```
 CC_Visual_Trade/
 ├── main.py                  # エントリポイント (FastAPI + APScheduler)
-├── .claude/commands/
-│   ├── long.md              # /long スキル
-│   └── short.md             # /short スキル
+├── prompt/
+│   └── context.md           # Claude への取引ルール・コンテキスト (rebuild 不要で編集可)
 ├── script/
 │   ├── long.py              # Long 注文ロジック
 │   └── short.py             # Short 注文ロジック
+├── .claude/commands/
+│   ├── long.md              # /long スキル定義
+│   └── short.md             # /short スキル定義
 ├── src/
-│   ├── chart.py             # チャート生成
-│   ├── orchestrator.py      # Claude CLI 呼び出し
-│   ├── trader.py            # 1時間決済ロジック
-│   ├── database.py          # SQLite モデル
+│   ├── chart.py             # マルチ時間軸チャート生成
+│   ├── orchestrator.py      # Claude CLI 呼び出し・レスポンス解析
+│   ├── trader.py            # 1時間強制決済ロジック
+│   ├── database.py          # SQLite モデル (Trade / Cycle)
 │   ├── dashboard.py         # FastAPI ルーター
-│   └── config.py            # 設定
-├── templates/               # Jinja2 テンプレート
-├── static/                  # CSS
-├── charts/                  # 生成チャート PNG (gitignore)
-└── data/                    # SQLite DB (gitignore)
+│   └── config.py            # 環境変数設定
+├── templates/               # Jinja2 テンプレート (volume mount)
+├── static/                  # CSS (volume mount)
+├── charts/                  # 生成チャート PNG — サイクルごとに上書き
+└── data/                    # SQLite DB
+```
+
+## プロンプトのカスタマイズ
+
+`prompt/context.md` を編集するだけで Claude への指示を変更できます。
+コンテナの再起動・再ビルドは不要です。
+
+```
+prompt/context.md  ← ここを編集
 ```
 
 ## 注意事項
