@@ -227,6 +227,7 @@ def _get_recent_cycles(limit=10):
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
+    from src import state
     return templates.TemplateResponse(
         "index.html",
         {
@@ -239,6 +240,7 @@ async def index(request: Request):
             "recent_trades": _get_recent_trades(10),
             "recent_cycles": _get_recent_cycles(10),
             "pnl_series": _get_pnl_series(),
+            "cycle_running": state.cycle_running,
         },
     )
 
