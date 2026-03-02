@@ -23,6 +23,9 @@ _PROMPT_TEMPLATE = """\
 
 ---
 
+過去の振り返りが `/app/data/reflections/` に蓄積されています。
+Bash で `ls /app/data/reflections/` を確認し、関連しそうなファイルを Read ツールで参照してから判断してください。
+
 以下の{count}つのチャートを Read ツールで開いてください:
 
 {chart_list}
@@ -43,6 +46,9 @@ _PROMPT_IN_POSITION = """\
 {context}
 
 ---
+
+過去の振り返りが `/app/data/reflections/` に蓄積されています。
+Bash で `ls /app/data/reflections/` を確認し、関連しそうなファイルを Read ツールで参照してから判断してください。
 
 現在ポジション保有中:
 - サイド: {side}

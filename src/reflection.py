@@ -2,7 +2,8 @@
 Post-trade reflection module.
 
 After a trade closes, archives the entry charts and launches a Claude subprocess
-to analyze the outcome and append learnings to /app/data/AGENTS.md.
+to analyze the outcome, write the full reflection to /app/data/reflections/,
+and update the ## 学習済みルール section of /app/data/AGENTS.md.
 """
 
 import logging
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 AGENTS_MD = "/app/data/AGENTS.md"
 CHARTS_DIR = "/app/charts"
+REFLECTIONS_DIR = "/app/data/reflections"
 
 
 def archive_charts(trade_id: int, coin: str) -> str | None:
@@ -110,15 +112,16 @@ def _build_reflection_prompt(trade_info: dict, cycle_info: dict | None) -> str:
 ls {archive_dir}
 ```
 
-ステップ2: チャートとエントリー時の判断根拠を照らし合わせて以下を分析してください:
+ステップ2: チャートとエントリー時の判断根拠を照らし合わせて以下を分析してください。
+必要であれば `/app/data/reflections/` 以下の過去の振り返りも参照してください。
 - エントリー判断の根拠となったシグナルは実際に正しかったか
 - 結果（{result_label}）の主因は何か
 - 見落としていたサイン・逆シグナルはあったか
 - 今後のトレードルール改善点（具体的に）
 
-ステップ3: `/app/data/AGENTS.md` をReadツールで読み込み、以下のフォーマットで新しい振り返りエントリを追記してWriteツールで保存してください。ファイルが存在しない場合は新規作成してください。
+ステップ3: Writeツールで `{REFLECTIONS_DIR}/trade_{trade_id}.md` に振り返り全文を書き込んでください。
 
-追記フォーマット:
+フォーマット:
 ```markdown
 ## Trade {trade_id} — {side.upper()} {coin} — {result_label} ({pnl_str})
 **日時**: {entry_time} → {exit_time}
@@ -134,15 +137,29 @@ ls {archive_dir}
 （見落としたサイン・改善すべき点）
 
 ### ルール更新
-- （具体的なルール追加・変更・削除）
+- （具体的なルール追加・変更・削除。なければ「なし」と記載）
 ```
 
-ステップ4: AGENTS.md全体を再度Readし、以下を行ってWriteで保存してください:
-- 重複したルールを統合
-- 矛盾するルールは最新のトレードを優先
-- 最小限の変更に留める
+ステップ4: `/app/data/AGENTS.md` をReadツールで読み込み、`## 学習済みルール` セクションのみをEditツールで更新してください。
+- トレード履歴セクション（## Trade N ...）は書かない
+- 新しいルールがある場合のみ追記。既存ルールと重複する場合は更新
 
-ステップ5: 以下のコマンドでアーカイブディレクトリを削除してください:
+ステップ5: 今回の振り返りで「このインジケーターがあれば」「この機能を追加したい」などコーディング改善リクエストがあれば、Bashツールで以下のコマンドを実行してGitHub Issueを作成してください。なければスキップ。
+```bash
+gh issue create \
+  --title "[Trade {trade_id}] （機能タイトル）" \
+  --body "## 背景
+Trade {trade_id} の振り返りで気づいた改善点
+
+## 説明
+（詳細な説明）
+
+## 優先度
+high / medium / low" \
+  --label "enhancement"
+```
+
+ステップ6: 以下のコマンドでアーカイブディレクトリを削除してください:
 ```bash
 rm -rf {archive_dir}
 ```

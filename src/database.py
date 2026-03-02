@@ -2,10 +2,10 @@ import os
 from contextlib import contextmanager
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text, create_engine
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
-os.makedirs("/app/data", exist_ok=True)
+os.makedirs("/app/data/reflections", exist_ok=True)
 
 engine = create_engine("sqlite:////app/data/trading.db", echo=False)
 
@@ -49,6 +49,17 @@ class Cycle(Base):
     action_taken = Column(String(20), nullable=True)  # 'long' | 'short' | 'hold' | 'skipped' | 'error'
     skip_reason = Column(String(200), nullable=True)
     claude_raw_output = Column(Text, nullable=True)
+
+
+class Reflection(Base):
+    """Stores full post-trade reflection text, written after each trade closes."""
+
+    __tablename__ = "reflections"
+
+    id = Column(Integer, primary_key=True)
+    trade_id = Column(Integer, ForeignKey("trades.id"), unique=True, index=True)
+    reflection_text = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 Base.metadata.create_all(engine)
