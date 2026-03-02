@@ -33,6 +33,7 @@ class Trade(Base):
     pnl_usd = Column(Float, nullable=True)
     status = Column(String(20), default="open")  # 'open' | 'closed' | 'error'
     created_at = Column(DateTime, default=datetime.utcnow)
+    cycle_id = Column(Integer, ForeignKey("cycles.id"), nullable=True)
 
 
 class Cycle(Base):
@@ -63,6 +64,13 @@ class Reflection(Base):
 
 
 Base.metadata.create_all(engine)
+
+# Migrate existing tables: add cycle_id to trades if missing
+with engine.connect() as conn:
+    from sqlalchemy import text
+    cols = [row[1] for row in conn.execute(text("PRAGMA table_info(trades)"))]
+    if "cycle_id" not in cols:
+        conn.execute(text("ALTER TABLE trades ADD COLUMN cycle_id INTEGER REFERENCES cycles(id)"))
 
 
 @contextmanager

@@ -7,6 +7,7 @@ Called by Claude Code via the /long skill or directly.
 """
 
 import logging
+import os
 import sys
 import time
 from datetime import datetime
@@ -28,6 +29,9 @@ def run():
     coin = settings.trading_coin
     size_usd = settings.position_size_usd
 
+    cycle_id_env = os.environ.get("CYCLE_ID")
+    cycle_id = int(cycle_id_env) if cycle_id_env else None
+
     if settings.dry_run:
         import eth_account
         from hyperliquid.info import Info
@@ -46,6 +50,7 @@ def run():
                 entry_order_id=None,
                 entry_time=datetime.utcnow(),
                 status="open",
+                cycle_id=cycle_id,
             )
             session.add(trade)
             session.commit()
@@ -136,6 +141,7 @@ def run():
             entry_order_id=oid,
             entry_time=datetime.utcnow(),
             status="open",
+            cycle_id=cycle_id,
         )
         session.add(trade)
         session.commit()

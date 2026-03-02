@@ -5,6 +5,7 @@ decides LONG/SHORT/HOLD, and executes the appropriate script.
 """
 
 import logging
+import os
 import re
 import subprocess
 from datetime import datetime
@@ -155,8 +156,24 @@ def run_cycle(charts: list[tuple[str, str, str]], open_trade: Trade | None = Non
         )
         logger.info(f"Calling Claude Code CLI with {len(charts)} timeframe charts")
 
+    # 15m チャートパスをダッシュボード表示用に保存
+    primary_chart = next((p for _, _, p in charts if "15m" in p), charts[0][2] if charts else "")
+
+    # Cycle を subprocess より前に作成し ID を確保する（long.py/short.py が参照できるよう）
+    with get_session() as session:
+        cycle = Cycle(
+            timestamp=datetime.utcnow(),
+            coin=coin,
+            chart_path=primary_chart,
+        )
+        session.add(cycle)
+        session.commit()
+        cycle_id = cycle.id
+
     claude_output = ""
     try:
+        env = os.environ.copy()
+        env["CYCLE_ID"] = str(cycle_id)
         result = subprocess.run(
             [
                 "claude",
@@ -168,6 +185,7 @@ def run_cycle(charts: list[tuple[str, str, str]], open_trade: Trade | None = Non
             text=True,
             timeout=300,   # 6枚読むので余裕を持たせる
             cwd="/app",
+            env=env,
         )
         claude_output = result.stdout
         if result.stderr:
@@ -197,20 +215,14 @@ def run_cycle(charts: list[tuple[str, str, str]], open_trade: Trade | None = Non
     parsed = _parse_response(claude_output)
     logger.info(f"Decision: {parsed['decision']} | Reason: {parsed['reason'][:100]}")
 
-    # 15m チャートパスをダッシュボード表示用に保存
-    primary_chart = next((p for _, _, p in charts if "15m" in p), charts[0][2] if charts else "")
-
+    # subprocess 完了後に Cycle を更新
     with get_session() as session:
-        cycle = Cycle(
-            timestamp=datetime.utcnow(),
-            coin=coin,
-            chart_path=primary_chart,
-            ai_decision=parsed["decision"],
-            ai_reasoning=parsed["reason"],
-            action_taken=parsed["decision"].lower(),
-            claude_raw_output=claude_output[:5000],
-        )
-        session.add(cycle)
-        session.commit()
+        cycle = session.query(Cycle).filter(Cycle.id == cycle_id).first()
+        if cycle:
+            cycle.ai_decision = parsed["decision"]
+            cycle.ai_reasoning = parsed["reason"]
+            cycle.action_taken = parsed["decision"].lower()
+            cycle.claude_raw_output = claude_output[:5000]
+            session.commit()
 
     return parsed

@@ -3,18 +3,17 @@ Post-trade reflection module.
 
 After a trade closes, archives the entry charts and launches a Claude subprocess
 to analyze the outcome, write the full reflection to /app/data/reflections/,
-and update the ## 学習済みルール section of /app/data/AGENTS.md.
+and update the ## 学習済みルール section of /app/AGENTS.md.
 """
 
 import logging
 import os
 import shutil
 import subprocess
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-AGENTS_MD = "/app/data/AGENTS.md"
+AGENTS_MD = "/app/AGENTS.md"
 CHARTS_DIR = "/app/charts"
 REFLECTIONS_DIR = "/app/data/reflections"
 
@@ -38,30 +37,24 @@ def archive_charts(trade_id: int, coin: str) -> str | None:
     return archive_dir
 
 
-def _lookup_entry_cycle(entry_time: datetime) -> dict | None:
+def _lookup_entry_cycle(trade_id: int) -> dict | None:
     """
-    Find the most recent LONG/SHORT Cycle record at or before entry_time.
+    Look up the Cycle that triggered a trade by trade.cycle_id.
     Returns a dict with ai_decision, ai_reasoning, timestamp; or None.
     """
     try:
-        from src.database import Cycle, get_session
+        from src.database import Cycle, Trade, get_session
 
         with get_session() as session:
-            cycle = (
-                session.query(Cycle)
-                .filter(
-                    Cycle.ai_decision.in_(["LONG", "SHORT"]),
-                    Cycle.timestamp <= entry_time,
-                )
-                .order_by(Cycle.timestamp.desc())
-                .first()
-            )
-            if cycle:
-                return {
-                    "ai_decision": cycle.ai_decision,
-                    "ai_reasoning": cycle.ai_reasoning or "",
-                    "timestamp": cycle.timestamp.isoformat() if cycle.timestamp else "",
-                }
+            trade = session.query(Trade).filter(Trade.id == trade_id).first()
+            if trade and trade.cycle_id:
+                cycle = session.query(Cycle).filter(Cycle.id == trade.cycle_id).first()
+                if cycle:
+                    return {
+                        "ai_decision": cycle.ai_decision,
+                        "ai_reasoning": cycle.ai_reasoning or "",
+                        "timestamp": cycle.timestamp.isoformat() if cycle.timestamp else "",
+                    }
     except Exception as e:
         logger.warning(f"Could not look up entry cycle: {e}")
     return None
@@ -140,7 +133,7 @@ ls {archive_dir}
 - （具体的なルール追加・変更・削除。なければ「なし」と記載）
 ```
 
-ステップ4: `/app/data/AGENTS.md` をReadツールで読み込み、`## 学習済みルール` セクションのみをEditツールで更新してください。
+ステップ4: `/app/AGENTS.md` をReadツールで読み込み、`## 学習済みルール` セクションのみをEditツールで更新してください。
 - トレード履歴セクション（## Trade N ...）は書かない
 - 新しいルールがある場合のみ追記。既存ルールと重複する場合は更新
 
@@ -181,7 +174,7 @@ def trigger_reflection(trade_info: dict) -> None:
         )
         return
 
-    cycle_info = _lookup_entry_cycle(trade_info.get("entry_time"))
+    cycle_info = _lookup_entry_cycle(trade_info.get("trade_id"))
     prompt = _build_reflection_prompt(trade_info, cycle_info)
 
     try:
