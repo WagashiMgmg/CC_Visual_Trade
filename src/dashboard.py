@@ -4,13 +4,13 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import markdown as md
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-from src.database import Cycle, Trade, get_session
+import markdown as md
+from src.database import Cycle, MagiVote, Trade, get_session
 
 router = APIRouter()
 templates = Jinja2Templates(directory="/app/templates")
@@ -52,6 +52,56 @@ def _get_open_trade():
             "entry_time": t.entry_time.strftime("%H:%M:%S UTC"),
             "elapsed": str(elapsed).split(".")[0],
             "close_in": str(remaining).split(".")[0],
+        }
+
+
+def _get_latest_magi():
+    """Return MAGI vote data for the latest cycle."""
+    with get_session() as session:
+        cycle = session.query(Cycle).order_by(Cycle.id.desc()).first()
+        if not cycle:
+            return None
+        cycle_id = cycle.id
+        consensus = cycle.ai_decision
+        action    = cycle.action_taken
+
+        # Fetch votes for this cycle, grouped by agent — take the latest round per agent
+        all_votes = (
+            session.query(MagiVote)
+            .filter(MagiVote.cycle_id == cycle_id)
+            .order_by(MagiVote.agent_name, MagiVote.round.desc())
+            .all()
+        )
+        # Keep only the last (highest round) vote per agent
+        by_agent: dict[str, MagiVote] = {}
+        for v in all_votes:
+            if v.agent_name not in by_agent:
+                by_agent[v.agent_name] = v
+
+        # Determine how many rounds were used
+        rounds_used = max((v.round for v in all_votes), default=0) + 1
+
+        # Count votes that agree with consensus
+        def agent_data(name: str) -> dict | None:
+            v = by_agent.get(name)
+            if not v:
+                return None
+            agrees = (v.decision == consensus) if consensus else None
+            return {
+                "decision": v.decision,
+                "reasoning": (v.reasoning or "")[:200],
+                "agrees": agrees,
+            }
+
+        return {
+            "cycle_id":  cycle_id,
+            "timestamp": cycle.timestamp.strftime("%Y-%m-%d %H:%M UTC"),
+            "consensus": consensus,
+            "rounds": rounds_used,
+            "action": action,
+            "melchior":  agent_data("melchior"),
+            "balthazar": agent_data("balthazar"),
+            "caspar":    agent_data("caspar"),
         }
 
 
@@ -170,6 +220,7 @@ async def index(request: Request):
             "request": request,
             "open_trade": _get_open_trade(),
             "latest_cycle": _get_latest_cycle(),
+            "magi": _get_latest_magi(),
             "all_charts": _get_all_chart_urls(),
             "stats": _get_stats(),
             "recent_trades": _get_recent_trades(10),
@@ -209,6 +260,7 @@ async def api_status():
     return {
         "open_trade": _get_open_trade(),
         "latest_cycle": _get_latest_cycle(),
+        "magi": _get_latest_magi(),
         "stats": _get_stats(),
         "all_charts": _get_all_chart_urls(),
     }

@@ -2,8 +2,8 @@
 {% set page = "index" %}
 
 {% block content %}
-<!-- Top cards row -->
-<div class="grid grid-3">
+<!-- Top cards row: Position + Stats (2-col) -->
+<div class="grid grid-2">
 
   <!-- Current Position -->
   <div class="card {% if open_trade %}card-{{ open_trade.side }}{% endif %}">
@@ -42,20 +42,6 @@
     {% endif %}
   </div>
 
-  <!-- Latest AI Decision -->
-  <div class="card">
-    <div class="card-label">Latest AI Decision</div>
-    {% if latest_cycle %}
-      <div class="decision-badge decision-{{ (latest_cycle.decision or 'HOLD') | lower }}">
-        {{ latest_cycle.decision or 'HOLD' }}
-      </div>
-      <div class="decision-reason">{{ latest_cycle.reason | safe }}</div>
-      <div class="cycle-time">{{ latest_cycle.timestamp }}</div>
-    {% else %}
-      <div class="no-position">No cycles yet</div>
-    {% endif %}
-  </div>
-
   <!-- Stats -->
   <div class="card">
     <div class="card-label">Statistics</div>
@@ -81,7 +67,114 @@
     </div>
   </div>
 
-</div><!-- /grid-3 -->
+</div><!-- /grid-2 -->
+
+<!-- MAGI System — full width -->
+<div class="card card-magi">
+  <div class="card-label magi-card-label">MAGI SYSTEM</div>
+  {% if magi %}
+  <div class="magi-panel">
+
+    <!-- Left: 提訴 -->
+    <div class="magi-side magi-side-left">
+      <div class="magi-teal-bars"><span></span><span></span></div>
+      <div class="magi-kanji">提訴</div>
+      <div class="magi-teal-bars"><span></span><span></span></div>
+      <div class="magi-code">CODE : {{ magi.cycle_id or '—' }}</div>
+      <div class="magi-file-info">
+        <div>FILE:MAGI_SYS</div>
+        <div>EXTENTION:6008</div>
+        <div>EX_MODE:OFF</div>
+        <div>PRIORITY:AAA</div>
+      </div>
+      <div class="magi-signal magi-signal-{{ (magi.consensus or 'hold') | lower }}">
+        {{ magi.consensus or 'HOLD' }}
+      </div>
+    </div>
+
+    <!-- Center: SVG Y-pipe layout -->
+    {% set bv = magi.balthazar %}
+    {% set cv = magi.caspar %}
+    {% set mv = magi.melchior %}
+    {% set C_AGREE    = '#3a6ba8' %}
+    {% set C_DISAGREE = '#b82020' %}
+    {% set C_OFF      = '#161b22' %}
+    {% set bv_col = C_AGREE if bv and bv.agrees else (C_DISAGREE if bv and not bv.agrees else C_OFF) %}
+    {% set cv_col = C_AGREE if cv and cv.agrees else (C_DISAGREE if cv and not cv.agrees else C_OFF) %}
+    {% set mv_col = C_AGREE if mv and mv.agrees else (C_DISAGREE if mv and not mv.agrees else C_OFF) %}
+
+    <div class="magi-center">
+
+      <!-- SVG: fills + Y-pipe strokes -->
+      <svg class="magi-svg" viewBox="0 0 100 100" preserveAspectRatio="none"
+           xmlns="http://www.w3.org/2000/svg">
+        <!-- Gemini (BALTHASAR): hexagon — top edge from x=25 to x=75, chamfered bottom corners -->
+        <polygon points="28,0 72,0 72,28 60,48 40,48 28,28" fill="{{ bv_col }}"/>
+        <!-- Codex (CASPER) fill — bottom-left pentagon (top-right corner chamfered) -->
+        <polygon points="0,48 24,48 35,68 35,100 0,100" fill="{{ cv_col }}"/>
+        <!-- Junction (dark bg) — center gap -->
+        <rect x="35" y="48" width="30" height="52" fill="#161b22"/>
+        <!-- Claude (MELCHIOR) fill — bottom-right pentagon (top-left corner chamfered) -->
+        <polygon points="76,48 100,48 100,100 65,100 65,68" fill="{{ mv_col }}"/>
+
+        <!-- Y-pipe dividers (no vertical pipe walls) -->
+        <path d="M 28,0 L 72,0 L 72,28 L 60,48
+                 M 28,0 L 28,28 L 40,48
+                 M 40,48 L 60,48
+                 M 0,48 L 24,48 L 35,68 L 35,100 L 0,100 L 0,48
+                 M 76,48 L 100,48 L 100,100 L 65,100 L 65,68 L 76,48"
+              stroke="#c87828" stroke-width="2" fill="none"
+              vector-effect="non-scaling-stroke"/>
+
+      </svg>
+
+      <!-- Scan-line overlay -->
+      <div class="magi-scanlines"></div>
+
+      <!-- Text labels (absolute, matching SVG regions) -->
+
+      <!-- Gemini label (top trapezoid) -->
+      <div class="magi-lbl magi-lbl-balt {{ 'lbl-agree' if bv and bv.agrees else ('lbl-disagree' if bv else 'lbl-offline') }}">
+        <div class="magi-lbl-name">Gemini</div>
+        <div class="magi-lbl-vote">{{ bv.decision if bv else 'OFFLINE' }}</div>
+      </div>
+
+      <!-- Codex label (bottom-left) -->
+      <div class="magi-lbl magi-lbl-casp {{ 'lbl-agree' if cv and cv.agrees else ('lbl-disagree' if cv else 'lbl-offline') }}">
+        <div class="magi-lbl-name">Codex</div>
+        <div class="magi-lbl-vote">{{ cv.decision if cv else 'OFFLINE' }}</div>
+      </div>
+
+      <!-- MAGI junction (empty — no text) -->
+      <div class="magi-lbl magi-lbl-junc"></div>
+
+      <!-- Claude label (bottom-right) -->
+      <div class="magi-lbl magi-lbl-melc {{ 'lbl-agree' if mv and mv.agrees else ('lbl-disagree' if mv else 'lbl-offline') }}">
+        <div class="magi-lbl-name">Claude</div>
+        <div class="magi-lbl-vote">{{ mv.decision if mv else 'OFFLINE' }}</div>
+      </div>
+
+    </div>
+
+    <!-- Right: 決議 -->
+    <div class="magi-side magi-side-right">
+      <div class="magi-teal-bars"><span></span><span></span></div>
+      <div class="magi-kanji">決議</div>
+      <div class="magi-teal-bars"><span></span><span></span></div>
+      {% if magi.rounds > 1 %}
+        <div class="magi-status-badge magi-deliberating">審議中</div>
+        <div class="magi-round-label">第{{ magi.rounds - 1 }}回再審議</div>
+      {% else %}
+        <div class="magi-status-badge magi-status-resolved">即時決定</div>
+      {% endif %}
+      <div class="magi-ts">{{ magi.timestamp }}</div>
+    </div>
+
+  </div>
+  {% else %}
+    <div class="no-position">No cycles yet</div>
+  {% endif %}
+</div>
 
 <!-- P&L Equity Curve -->
 {% if pnl_series['values'] | length > 1 %}
