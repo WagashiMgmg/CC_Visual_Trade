@@ -245,6 +245,198 @@ body {
 .badge-status-closed { background: rgba(63,185,80,.1);   color: var(--green); }
 .badge-status-error  { background: rgba(248,81,73,.1);   color: var(--red); }
 
+/* ── MAGI System (EVA-style) ──────────────────────────────────── */
+:root {
+  --magi-bg:       #030810;
+  --magi-orange:   #c87828;
+  --magi-teal:     #1a9080;
+  --magi-agree:    #3a6ba8;
+  --magi-disagree: #b82020;
+  --magi-offline:  #0d1520;
+}
+
+/* Card wrapper */
+.card-magi {
+  background: var(--surface);
+  border-color: var(--magi-orange);
+  padding: 12px 14px;
+  margin-bottom: var(--gap);
+}
+.magi-card-label {
+  color: var(--magi-orange);
+  letter-spacing: .15em;
+  font-size: 10px;
+  margin-bottom: 10px;
+}
+
+/* ── Outer panel shell ── */
+.magi-panel {
+  display: flex;
+  height: 320px;
+  background: var(--surface);
+  border: 2px solid var(--magi-orange);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  color: var(--magi-orange);
+  overflow: hidden;
+  position: relative;         /* anchor for ::after scan-line overlay */
+}
+
+/* ── Side columns (提訴 / 決議) ── */
+.magi-side {
+  flex-shrink: 0;
+  width: 200px;
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.magi-side-left  { border-right: 2px solid var(--magi-orange); }
+.magi-side-right { border-left:  2px solid var(--magi-orange); }
+
+.magi-teal-bars        { display: flex; flex-direction: column; gap: 3px; margin: 3px 0; }
+.magi-teal-bars span   { display: block; height: 2px; background: var(--magi-teal); }
+
+.magi-kanji {
+  font-size: 36px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: .02em;
+}
+
+.magi-code {
+  font-size: 12px;
+  margin-top: 6px;
+}
+.magi-file-info {
+  font-size: 9.5px;
+  line-height: 1.7;
+  opacity: .7;
+}
+.magi-signal {
+  font-size: 22px;
+  font-weight: 900;
+  margin-top: auto;
+  letter-spacing: .06em;
+}
+.magi-signal-long  { color: #3fb950; }
+.magi-signal-short { color: #f85149; }
+.magi-signal-hold  { color: #e3b341; }
+.magi-signal-exit  { color: #f85149; }
+
+.magi-status-badge {
+  border: 2px solid var(--magi-orange);
+  padding: 4px 8px;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  margin-top: 8px;
+  letter-spacing: .04em;
+}
+.magi-status-resolved {
+  border-color: var(--magi-teal);
+  color: var(--magi-teal);
+  font-size: 12px;
+}
+.magi-round-label { font-size: 10px; opacity: .7; margin-top: 4px; }
+.magi-ts {
+  font-size: 9px;
+  opacity: .5;
+  margin-top: auto;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+/* ── Center: SVG Y-pipe layout ── */
+.magi-center {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* SVG fills the whole center */
+.magi-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* CRT scan-line overlay */
+.magi-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0,0,0,.06) 3px,
+    rgba(0,0,0,.06) 4px
+  );
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ── Absolute text labels ── */
+.magi-lbl {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Region positions (match SVG polygon coordinates) */
+.magi-lbl-balt { top: 0; height: 48%; left: 20%; right: 20%; padding: 0 5%; }
+.magi-lbl-casp { top: 48%; bottom: 0; left: 0;   width: 35%; }
+.magi-lbl-junc { top: 48%; bottom: 0; left: 35%;  width: 30%; }
+.magi-lbl-melc { top: 48%; bottom: 0; right: 0;  width: 35%; }
+
+/* Agent name (Claude / Gemini / Codex) */
+.magi-lbl-name {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+/* Vote decision */
+.magi-lbl-vote {
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  line-height: 1;
+}
+
+/* MAGI junction text */
+.magi-junc-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .2em;
+  color: var(--magi-orange);
+}
+
+/* Text colours per vote state */
+.magi-lbl.lbl-agree .magi-lbl-name,
+.magi-lbl.lbl-agree .magi-lbl-vote    { color: rgba(0,0,0,.82); }
+.magi-lbl.lbl-disagree .magi-lbl-name,
+.magi-lbl.lbl-disagree .magi-lbl-vote { color: rgba(255,255,255,.92); }
+.magi-lbl.lbl-offline .magi-lbl-name,
+.magi-lbl.lbl-offline .magi-lbl-vote  { color: var(--magi-orange); opacity: .28; }
+
+/* ── Blinking 審議中 ── */
+.magi-status-badge.magi-deliberating::before {
+  content: '● ';
+  animation: magi-blink 1s step-end infinite;
+}
+@keyframes magi-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
 /* ── Utilities ────────────────────────────────────────────────── */
 .mono    { font-family: "SFMono-Regular", Consolas, monospace; }
 .small   { font-size: 12px; }

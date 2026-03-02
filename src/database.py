@@ -52,6 +52,21 @@ class Cycle(Base):
     claude_raw_output = Column(Text, nullable=True)
 
 
+class MagiVote(Base):
+    """Records each MAGI agent's vote per cycle and round."""
+
+    __tablename__ = "magi_votes"
+
+    id         = Column(Integer, primary_key=True)
+    cycle_id   = Column(Integer, ForeignKey("cycles.id"), nullable=False, index=True)
+    agent_name = Column(String(20), nullable=False)   # 'melchior' | 'balthazar' | 'caspar'
+    round      = Column(Integer, default=0)            # 0=初回, 1=再審議1, 2=再審議2, 3=再審議3
+    decision   = Column(String(10), nullable=False)    # 'LONG' | 'SHORT' | 'HOLD' | 'EXIT'
+    reasoning  = Column(Text, nullable=True)
+    raw_output = Column(Text, nullable=True)
+    timestamp  = Column(DateTime, default=datetime.utcnow)
+
+
 class Reflection(Base):
     """Stores full post-trade reflection text, written after each trade closes."""
 
