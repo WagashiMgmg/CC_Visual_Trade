@@ -270,6 +270,7 @@ async def api_pnl():
 @router.get("/api/status")
 async def api_status():
     """JSON endpoint for polling updates."""
+    from src import state
     return {
         "open_trade": _get_open_trade(),
         "latest_cycle": _get_latest_cycle(),
@@ -277,4 +278,5 @@ async def api_status():
         "stats": _get_stats(),
         "all_charts": _get_all_chart_urls(),
         "next_cycle_at": _get_next_cycle_at(),
+        "cycle_running": state.cycle_running,
     }

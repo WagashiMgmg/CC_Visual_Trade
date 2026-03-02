@@ -48,6 +48,8 @@ def trading_cycle():
     if open_trade:
         logger.info(f"Open position found (trade_id={open_trade.id}), will ask Claude for EXIT/HOLD")
 
+    from src import state
+
     logger.info("=== Trading cycle start ===")
     try:
         charts = generate_multi_tf_charts(settings.trading_coin)
@@ -58,11 +60,14 @@ def trading_cycle():
         logger.error(f"Chart generation failed: {e}")
         return
 
+    state.cycle_running = True
     try:
         result = run_cycle(charts, open_trade=open_trade)
         logger.info(f"Cycle complete: {result['decision']} — {result['reason'][:60]}")
     except Exception as e:
         logger.error(f"Orchestrator failed: {e}")
+    finally:
+        state.cycle_running = False
 
 
 def close_check():
