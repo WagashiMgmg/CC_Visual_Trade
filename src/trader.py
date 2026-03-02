@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from src.config import settings
 from src.database import Trade, get_session
+from src.reflection import trigger_reflection
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ def close_expired_positions():
     Called by APScheduler every 30 seconds.
     """
     cutoff = datetime.utcnow() - timedelta(seconds=settings.position_max_duration_secs)
+    closed_trades = []
 
     with get_session() as session:
         expired = (
@@ -59,17 +61,33 @@ def close_expired_positions():
                     exit_price = _close_position(trade)
                     pnl = calc_pnl(trade.side, trade.entry_price, exit_price, trade.size_usd)
 
+                exit_time = datetime.utcnow()
                 trade.exit_price = exit_price
-                trade.exit_time = datetime.utcnow()
+                trade.exit_time = exit_time
                 trade.pnl_usd = pnl
                 trade.status = "closed"
                 session.commit()
                 logger.info(f"Closed trade_id={trade.id} exit_price={exit_price:.2f} pnl={pnl:.2f}")
 
+                closed_trades.append({
+                    "trade_id": trade.id,
+                    "coin": trade.coin,
+                    "side": trade.side,
+                    "entry_price": trade.entry_price,
+                    "exit_price": exit_price,
+                    "pnl_usd": pnl,
+                    "entry_time": trade.entry_time,
+                    "exit_time": exit_time,
+                    "archive_dir": f"/app/charts/trade_{trade.id}",
+                })
+
             except Exception as e:
                 logger.error(f"Failed to close trade_id={trade.id}: {e}")
                 trade.status = "error"
                 session.commit()
+
+    for trade_info in closed_trades:
+        trigger_reflection(trade_info)
 
 
 def _close_position(trade: Trade) -> float:

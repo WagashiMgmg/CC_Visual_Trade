@@ -15,6 +15,7 @@ sys.path.insert(0, "/app")
 
 from src.config import settings
 from src.database import Trade, get_session
+from src.reflection import archive_charts
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +33,8 @@ def run():
         from hyperliquid.info import Info
         info = Info(settings.api_url, skip_ws=True)
         mid = float(info.all_mids()[coin])
-        qty = round(size_usd / mid, 6)
+        sz_decimals = next((a["szDecimals"] for a in info.meta()["universe"] if a["name"] == coin), 3)
+        qty = round(size_usd / mid, sz_decimals)
         logger.info(f"[DRY RUN] Would place SHORT {coin} ${size_usd} @ {mid}")
         with get_session() as session:
             trade = Trade(
@@ -47,7 +49,9 @@ def run():
             )
             session.add(trade)
             session.commit()
-        print(f"SHORT recorded (DRY RUN): entry_price={mid} trade_id={trade.id}")
+            trade_id = trade.id
+        archive_charts(trade_id, coin)
+        print(f"SHORT recorded (DRY RUN): entry_price={mid} trade_id={trade_id}")
         return
 
     import eth_account
@@ -62,13 +66,14 @@ def run():
     # Set leverage
     exchange.update_leverage(settings.leverage, coin, is_cross=True)
 
-    # Get mid price
+    # Get mid price and sz_decimals for proper rounding
     mids = info.all_mids()
     mid = float(mids[coin])
-    qty = round(size_usd / mid, 6)
+    sz_decimals = next((a["szDecimals"] for a in info.meta()["universe"] if a["name"] == coin), 3)
+    qty = round(size_usd / mid, sz_decimals)
     limit_px = round(mid, 0)
 
-    logger.info(f"Placing SHORT limit: {coin} qty={qty} px={limit_px}")
+    logger.info(f"Placing SHORT limit: {coin} qty={qty} (sz_decimals={sz_decimals}) px={limit_px}")
     order_result = exchange.order(coin, False, qty, limit_px, {"limit": {"tif": "Gtc"}})
     logger.info(f"Order result: {order_result}")
 
@@ -136,6 +141,7 @@ def run():
         session.commit()
         trade_id = trade.id
 
+    archive_charts(trade_id, coin)
     print(f"SHORT executed: entry_price={entry_price} qty={qty} order_id={oid} trade_id={trade_id}")
     logger.info(f"Trade recorded: id={trade_id}")
 

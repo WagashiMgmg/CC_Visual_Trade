@@ -8,10 +8,13 @@ from datetime import datetime
 
 from src.config import settings
 from src.database import Trade, get_session
+from src.reflection import trigger_reflection
 from src.trader import calc_pnl
 
 
 def run():
+    trade_info = None
+
     with get_session() as session:
         trade = session.query(Trade).filter(Trade.status == "open").first()
         if not trade:
@@ -27,13 +30,30 @@ def run():
             exit_price = _close_position(trade)
 
         pnl = calc_pnl(trade.side, trade.entry_price, exit_price, trade.size_usd)
+        exit_time = datetime.utcnow()
         trade.exit_price = exit_price
-        trade.exit_time = datetime.utcnow()
+        trade.exit_time = exit_time
         trade.pnl_usd = round(pnl, 4)
         trade.status = "closed"
         session.commit()
+
+        trade_info = {
+            "trade_id": trade.id,
+            "coin": trade.coin,
+            "side": trade.side,
+            "entry_price": trade.entry_price,
+            "exit_price": exit_price,
+            "pnl_usd": round(pnl, 4),
+            "entry_time": trade.entry_time,
+            "exit_time": exit_time,
+            "archive_dir": f"/app/charts/trade_{trade.id}",
+        }
+
         prefix = "[DRY RUN] " if settings.dry_run else ""
         print(f"{prefix}Closed trade_id={trade.id} exit={exit_price:.2f} pnl={pnl:.2f}")
+
+    if trade_info:
+        trigger_reflection(trade_info)
 
 
 if __name__ == "__main__":
