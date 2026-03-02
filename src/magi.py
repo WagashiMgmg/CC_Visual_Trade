@@ -82,7 +82,7 @@ class ClaudeAgent(MagiAgent):
                 ],
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=600,
                 cwd="/app",
                 env=os.environ.copy(),
             )
@@ -115,7 +115,6 @@ class GeminiAgent(MagiAgent):
             return False
 
     def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
-        # Build prompt with @chart references (Gemini image input syntax)
         chart_refs = " ".join(f"@{p}" for p in charts)
         full_prompt = f"{prompt}\n\nCharts: {chart_refs}" if charts else prompt
 
@@ -134,7 +133,7 @@ class GeminiAgent(MagiAgent):
                 ["gemini", "-p", prompt],
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=600,
                 cwd="/app",
                 env=os.environ.copy(),
             )

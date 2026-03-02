@@ -24,7 +24,9 @@ WORKDIR /app
 
 # Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
+RUN pip install --no-cache-dir -r requirements.txt \
+    && playwright install chromium --with-deps
 
 # Application code
 COPY . .

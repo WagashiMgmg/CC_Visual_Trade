@@ -5,6 +5,7 @@ Starts:
   2. FastAPI: dashboard on port 8080
 """
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -17,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.config import settings
 from src.dashboard import router as dashboard_router
+from src.discord_bot import start_bot
 
 logging.basicConfig(
     level=logging.INFO,
@@ -106,10 +108,13 @@ async def lifespan(app: FastAPI):
         f"DryRun={settings.dry_run}"
     )
 
+    bot_task = asyncio.create_task(start_bot())
+
     yield
 
     scheduler.shutdown(wait=False)
     logger.info("Scheduler stopped.")
+    bot_task.cancel()
 
 
 app = FastAPI(title="CC Visual Trade", lifespan=lifespan)
