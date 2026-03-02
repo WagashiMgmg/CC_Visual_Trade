@@ -29,11 +29,18 @@ class Settings(BaseSettings):
     discord_bot_token: str = ""
     discord_channel_id: str = ""
 
+    # Timing (configurable via .env)
+    cycle_interval_minutes: int = 60        # How often Claude analyzes charts
+    position_max_hours: int = 4             # Force-close positions after this many hours
+
     # Internals (not from .env)
     candle_count: int = 100
     limit_order_timeout_secs: int = 30
     close_limit_timeout_secs: int = 60
-    position_max_duration_secs: int = 3600  # 1 hour
+
+    @property
+    def position_max_duration_secs(self) -> int:
+        return self.position_max_hours * 3600
 
     @property
     def api_url(self) -> str:

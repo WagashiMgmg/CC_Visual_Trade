@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -83,7 +83,7 @@ async def lifespan(app: FastAPI):
     # Trading cycle at :00, :15, :30, :45 of every hour
     scheduler.add_job(
         trading_cycle,
-        CronTrigger(minute="0,15,30,45"),
+        IntervalTrigger(minutes=settings.cycle_interval_minutes),
         id="trading_cycle",
         name="Trading Cycle",
         max_instances=1,

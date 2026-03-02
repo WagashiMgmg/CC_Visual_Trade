@@ -75,7 +75,11 @@ def _fetch_mid(coin: str) -> float:
 def _load_context() -> str:
     try:
         with open(_CONTEXT_FILE) as f:
-            return f.read().strip()
+            content = f.read().strip()
+        return content.format(
+            position_max_hours=settings.position_max_hours,
+            cycle_interval_minutes=settings.cycle_interval_minutes,
+        )
     except FileNotFoundError:
         logger.warning(f"Context file not found: {_CONTEXT_FILE}")
         return ""

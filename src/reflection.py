@@ -168,6 +168,8 @@ def trigger_reflection(trade_info: dict) -> None:
     prompt = _build_reflection_prompt(trade_info, cycle_info)
 
     try:
+        env = os.environ.copy()
+        env.pop("CLAUDECODE", None)  # Allow nested claude launch from within a claude session
         subprocess.Popen(
             [
                 "claude", "-p", prompt,
@@ -178,6 +180,7 @@ def trigger_reflection(trade_info: dict) -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             close_fds=True,
+            env=env,
         )
         logger.info(
             f"Launched reflection subprocess for trade_id={trade_info.get('trade_id')}"
