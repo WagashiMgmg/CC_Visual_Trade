@@ -157,15 +157,18 @@
     </div>
 
     <!-- Right: 決議 -->
-    <div class="magi-side magi-side-right">
+    <div class="magi-side magi-side-right" id="magi-side-right">
       <div class="magi-teal-bars"><span></span><span></span></div>
       <div class="magi-kanji">決議</div>
       <div class="magi-teal-bars"><span></span><span></span></div>
+      <!-- 審議中（cycle_running のとき JS で表示） -->
+      <div class="magi-status-badge magi-running-badge">審議中</div>
+      <!-- 完了後 -->
       {% if magi.rounds > 1 %}
-        <div class="magi-status-badge magi-deliberating">再審議で決定</div>
-        <div class="magi-round-label">第{{ magi.rounds - 1 }}回再審議</div>
+        <div class="magi-status-badge magi-deliberating magi-result-badge">再審議で決定</div>
+        <div class="magi-round-label magi-result-badge">第{{ magi.rounds - 1 }}回再審議</div>
       {% else %}
-        <div class="magi-status-badge magi-status-resolved">即時決定</div>
+        <div class="magi-status-badge magi-status-resolved magi-result-badge">即時決定</div>
       {% endif %}
       <div class="magi-ts">{{ magi.timestamp }}</div>
     </div>
@@ -333,6 +336,12 @@
     try {
       const r = await fetch('/api/status');
       const data = await r.json();
+
+      // Toggle cycle-active on MAGI right panel
+      const magiRight = document.getElementById('magi-side-right');
+      if (magiRight) {
+        magiRight.classList.toggle('cycle-active', !!data.cycle_running);
+      }
 
       // Update chart grid if new charts arrived
       if (data.all_charts && data.all_charts.length > 0) {

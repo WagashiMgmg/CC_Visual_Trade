@@ -448,14 +448,24 @@ body {
 .magi-lbl.lbl-offline .magi-lbl-name,
 .magi-lbl.lbl-offline .magi-lbl-vote  { color: var(--magi-orange); opacity: .28; }
 
-/* ── Blinking 審議中 ── */
-.magi-status-badge.magi-deliberating::before {
+/* 審議中バッジ: デフォルト非表示、cycle-active のとき表示・点滅 */
+.magi-running-badge { display: none; }
+.magi-running-badge::before {
   content: '● ';
   animation: magi-blink 1s step-end infinite;
 }
 @keyframes magi-blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
+}
+
+/* cycle-active のとき: 審議中を表示、完了バッジを隠す */
+#magi-side-right.cycle-active .magi-running-badge { display: block; }
+#magi-side-right.cycle-active .magi-result-badge  { display: none; }
+
+/* 再審議で決定: 静止ドット */
+.magi-status-badge.magi-deliberating::before {
+  content: '● ';
 }
 
 /* ── Utilities ────────────────────────────────────────────────── */
