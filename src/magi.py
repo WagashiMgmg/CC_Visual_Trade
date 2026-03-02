@@ -317,6 +317,8 @@ class MagiSystem:
                 f"【再審議 Round 2 — 外部情報収集】前回までのMAGI判断:\n{others_summary}\n\n"
                 f"あなた({agent.display})の前回判断: {my_vote.get('decision', 'HOLD')}\n"
                 f"Bashツールを使ってウェブ検索し、最新のマーケット情報・ニュースを確認した上で再判断してください。\n"
+                f"⚠️ Bash はウェブ検索・情報収集のみに使用すること。"
+                f"long.py / short.py / close.py などのトレードスクリプトは絶対に実行しないこと。\n"
                 f"チャートファイル:\n{chart_list}\n\n"
                 f"最後に必ず以下のフォーマットで出力してください:\n"
                 f"DECISION: {decision_fmt}\n"

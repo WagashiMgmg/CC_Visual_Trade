@@ -31,10 +31,12 @@
   </main>
 
   <script>
-    // Blink the live dot every 5s to show connection
+    // Blink the live dot only when the latest cycle went through re-deliberation (第N回再審議)
     const dot = document.getElementById('live-dot');
+    let magiDeliberated = false;
     setInterval(() => {
-      dot.classList.toggle('blink');
+      if (magiDeliberated) dot.classList.toggle('blink');
+      else dot.classList.remove('blink');
     }, 1000);
 
     // Next cycle countdown
@@ -52,6 +54,7 @@
         const r = await fetch('/api/status');
         const d = await r.json();
         if (d.next_cycle_at) nextCycleAt = new Date(d.next_cycle_at).getTime();
+        magiDeliberated = !!(d.magi && d.magi.rounds > 1);
       } catch(e) {}
     }
     fetchNextCycle();
