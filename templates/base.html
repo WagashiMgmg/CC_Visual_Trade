@@ -18,6 +18,10 @@
         <a href="/" class="nav-link {% if page == 'index' %}active{% endif %}">Dashboard</a>
         <a href="/trades" class="nav-link {% if page == 'trades' %}active{% endif %}">Trades</a>
       </nav>
+      <div class="next-cycle-wrap">
+        <span class="next-cycle-label">Next cycle</span>
+        <span class="next-cycle-timer mono" id="next-cycle-timer">—</span>
+      </div>
       <div id="live-dot" class="live-dot" title="Live"></div>
     </div>
   </header>
@@ -32,6 +36,27 @@
     setInterval(() => {
       dot.classList.toggle('blink');
     }, 1000);
+
+    // Next cycle countdown
+    let nextCycleAt = null;
+    function updateCountdown() {
+      const el = document.getElementById('next-cycle-timer');
+      if (!nextCycleAt) return;
+      const diff = Math.max(0, Math.floor((nextCycleAt - Date.now()) / 1000));
+      const m = String(Math.floor(diff / 60)).padStart(2, '0');
+      const s = String(diff % 60).padStart(2, '0');
+      el.textContent = `${m}:${s}`;
+    }
+    async function fetchNextCycle() {
+      try {
+        const r = await fetch('/api/status');
+        const d = await r.json();
+        if (d.next_cycle_at) nextCycleAt = new Date(d.next_cycle_at).getTime();
+      } catch(e) {}
+    }
+    fetchNextCycle();
+    setInterval(fetchNextCycle, 10000);
+    setInterval(updateCountdown, 1000);
   </script>
   {% block scripts %}{% endblock %}
 </body>

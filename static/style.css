@@ -59,6 +59,27 @@ body {
 .nav-link:hover { background: var(--surface2); color: var(--text); }
 .nav-link.active { color: var(--text); background: var(--surface2); }
 
+/* Next cycle countdown */
+.next-cycle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.next-cycle-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.next-cycle-timer {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--yellow);
+  min-width: 38px;
+  text-align: right;
+}
+
 /* Live indicator */
 .live-dot {
   width: 8px; height: 8px;

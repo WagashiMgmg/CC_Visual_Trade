@@ -191,6 +191,19 @@ def _get_latest_chart_url():
     return urls[0]["url"] if urls else None
 
 
+def _get_next_cycle_at() -> str | None:
+    try:
+        import sys
+        main = sys.modules.get("__main__")
+        if main:
+            job = main.scheduler.get_job("trading_cycle")
+            if job and job.next_run_time:
+                return job.next_run_time.isoformat()
+    except Exception:
+        pass
+    return None
+
+
 def _get_recent_cycles(limit=10):
     with get_session() as session:
         cycles = (
@@ -263,4 +276,5 @@ async def api_status():
         "magi": _get_latest_magi(),
         "stats": _get_stats(),
         "all_charts": _get_all_chart_urls(),
+        "next_cycle_at": _get_next_cycle_at(),
     }
