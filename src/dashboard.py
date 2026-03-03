@@ -76,7 +76,12 @@ def _get_open_trade():
 def _get_latest_magi():
     """Return MAGI vote data for the latest cycle."""
     with get_session() as session:
-        cycle = session.query(Cycle).order_by(Cycle.id.desc()).first()
+        cycle = (
+            session.query(Cycle)
+            .filter(Cycle.ai_decision.isnot(None))
+            .order_by(Cycle.id.desc())
+            .first()
+        )
         if not cycle:
             return None
         cycle_id = cycle.id
