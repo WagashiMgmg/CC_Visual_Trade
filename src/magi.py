@@ -107,30 +107,60 @@ class GeminiAgent(MagiAgent):
     name    = "balthazar"
     display = "Balthazar"
 
-    def _check_available(self) -> bool:
-        try:
-            r = subprocess.run(["gemini", "--version"], capture_output=True, timeout=5)
-            return r.returncode == 0
-        except Exception:
-            return False
+    # Model fallback order: default (flash) → flash-lite → pro
+    _MODEL_FALLBACK = [None, "gemini-2.5-flash-lite", "gemini-2.5-pro"]
+
+    def _check_available_quota(self) -> bool:
+        """Return True if at least one model has quota remaining."""
+        for model in self._MODEL_FALLBACK:
+            _, quota_exceeded = self._run_gemini("ping", model)
+            if not quota_exceeded:
+                return True
+        return False
 
     def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
+        # Re-check availability each cycle (quota may have reset)
+        if not self.available:
+            if not self._check_available_quota():
+                return _parse_vote("DECISION: HOLD\nREASON: Balthazar OFFLINE（全モデルクォータ枯渇）")
+            self.available = True
+            logger.info("[Balthazar] quota restored, back ONLINE")
         chart_refs = " ".join(f"@{p}" for p in charts)
         full_prompt = f"{prompt}\n\nCharts: {chart_refs}" if charts else prompt
 
-        output = self._run_gemini(full_prompt)
-        if output is None:
-            # Fallback: text-only prompt
-            logger.warning("[Balthazar] @ syntax failed, retrying text-only")
-            output = self._run_gemini(prompt)
-        if output is None:
-            return _parse_vote("DECISION: HOLD\nREASON: Gemini CLIエラー")
-        return _parse_vote(output)
+        for model in self._MODEL_FALLBACK:
+            output, quota_exceeded = self._run_gemini(full_prompt, model)
+            if output is not None:
+                return _parse_vote(output)
+            if not quota_exceeded:
+                # Non-quota error (@ syntax, etc.) — retry text-only once
+                logger.warning("[Balthazar] @ syntax failed, retrying text-only")
+                output, quota_exceeded = self._run_gemini(prompt, model)
+                if output is not None:
+                    return _parse_vote(output)
+                if not quota_exceeded:
+                    break  # Non-quota failure, skip remaining models
+            label = model or "default"
+            logger.warning(f"[Balthazar] quota exceeded on {label}, trying next model")
 
-    def _run_gemini(self, prompt: str) -> str | None:
+        # All models exhausted
+        logger.error("[Balthazar] all models quota-exceeded — marking OFFLINE")
+        self.available = False
+        return _parse_vote("DECISION: HOLD\nREASON: Balthazar OFFLINE（全モデルクォータ枯渇）")
+
+    def _run_gemini(self, prompt: str, model: str | None = None) -> tuple[str | None, bool]:
+        """
+        Run gemini CLI with optional model override.
+        Returns (output, quota_exceeded).
+        quota_exceeded=True means 429 TerminalQuotaError.
+        """
+        cmd = ["gemini"]
+        if model:
+            cmd += ["-m", model]
+        cmd += ["-p", prompt]
         try:
             result = subprocess.run(
-                ["gemini", "-p", prompt],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=600,
@@ -138,19 +168,22 @@ class GeminiAgent(MagiAgent):
                 env=os.environ.copy(),
             )
             if result.returncode != 0:
-                logger.warning(f"[Balthazar] non-zero exit: {result.stderr[:200]}")
-                return None
-            return result.stdout
+                stderr = result.stderr
+                if "TerminalQuotaError" in stderr or "exhausted your capacity" in stderr:
+                    return None, True
+                logger.warning(f"[Balthazar] non-zero exit ({model or 'default'}): {stderr[:200]}")
+                return None, False
+            return result.stdout, False
         except subprocess.TimeoutExpired:
-            logger.error("[Balthazar] timed out")
-            return None
+            logger.error(f"[Balthazar] timed out ({model or 'default'})")
+            return None, False
         except FileNotFoundError:
             logger.warning("[Balthazar] gemini CLI not found — marking unavailable")
             self.available = False
-            return None
+            return None, False
         except Exception as e:
-            logger.error(f"[Balthazar] error: {e}")
-            return None
+            logger.error(f"[Balthazar] error ({model or 'default'}): {e}")
+            return None, False
 
 
 # ── Caspar (placeholder) ──────────────────────────────────────────────────────
