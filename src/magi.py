@@ -143,10 +143,10 @@ class GeminiAgent(MagiAgent):
             label = model or "default"
             logger.warning(f"[Balthazar] quota exceeded on {label}, trying next model")
 
-        # All models exhausted
+        # All models exhausted → abstain (return None, not counted in majority)
         logger.error("[Balthazar] all models quota-exceeded — marking OFFLINE")
         self.available = False
-        return _parse_vote("DECISION: HOLD\nREASON: Balthazar OFFLINE（全モデルクォータ枯渇）")
+        return None
 
     def _run_gemini(self, prompt: str, model: str | None = None) -> tuple[str | None, bool]:
         """
@@ -218,10 +218,13 @@ class MagiSystem:
         return n // 2 + 1
 
     def _consensus(self, votes: dict[str, str]) -> str | None:
-        """Return consensus decision or None if no majority."""
+        """Return consensus decision or None if no majority.
+        Threshold is based on actual voters (abstentions not counted)."""
         from collections import Counter
+        if not votes:
+            return None
         counts = Counter(votes.values())
-        threshold = self._majority_threshold()
+        threshold = len(votes) // 2 + 1
         for decision, count in counts.most_common():
             if count >= threshold:
                 return decision
@@ -253,11 +256,10 @@ class MagiSystem:
                     vote = future.result()
                     if vote:
                         results[agent.name] = vote
-                    else:
-                        results[agent.name] = {"decision": "HOLD", "reasoning": "エラー", "raw_output": ""}
+                    # None → abstain (not counted in majority)
                 except Exception as e:
                     logger.error(f"[MAGI] {agent.name} future error: {e}")
-                    results[agent.name] = {"decision": "HOLD", "reasoning": "エラー", "raw_output": ""}
+                    # Exception → also abstain
 
         return results
 
@@ -415,6 +417,13 @@ class MagiSystem:
             'adopted_by': 'consensus' | 'master',
         }
         """
+        # ── Revive inactive agents (quota may have reset) ────────────────────
+        for agent in self.agents:
+            if not agent.available and hasattr(agent, "_check_available_quota"):
+                if agent._check_available_quota():
+                    agent.available = True
+                    logger.info(f"[MAGI] {agent.display} quota restored, back ONLINE")
+
         all_votes: dict[str, dict] = {}
         final_round = 0
 
