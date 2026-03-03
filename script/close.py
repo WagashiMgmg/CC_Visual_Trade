@@ -27,7 +27,12 @@ def run():
             exit_price = float(info.all_mids()[trade.coin])
         else:
             from src.trader import _close_position
-            exit_price = _close_position(trade)
+            try:
+                exit_price = _close_position(trade)
+            except RuntimeError as e:
+                print(f"ERROR: Close incomplete for trade_id={trade.id}: {e}")
+                print("Position kept as 'open' — will retry on next cycle.")
+                return
 
         pnl = calc_pnl(trade.side, trade.entry_price, exit_price, trade.size_usd)
         exit_time = datetime.utcnow()

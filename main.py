@@ -42,11 +42,14 @@ def trading_cycle():
     """
     from src.chart import generate_multi_tf_charts
     from src.orchestrator import run_cycle
-    from src.trader import get_open_trade
+    from src.trader import get_live_position
 
-    open_trade = get_open_trade()
-    if open_trade:
-        logger.info(f"Open position found (trade_id={open_trade.id}), will ask Claude for EXIT/HOLD")
+    live_pos = get_live_position()
+    if live_pos:
+        logger.info(
+            f"Open position found (trade_id={live_pos['trade_id']}, "
+            f"side={live_pos['side']}, HL source), will ask Claude for EXIT/HOLD"
+        )
 
     from src import state
 
@@ -62,7 +65,7 @@ def trading_cycle():
 
     state.cycle_running = True
     try:
-        result = run_cycle(charts, open_trade=open_trade)
+        result = run_cycle(charts, live_position=live_pos)
         logger.info(f"Cycle complete: {result['decision']} — {result['reason'][:60]}")
     except Exception as e:
         logger.error(f"Orchestrator failed: {e}")
@@ -71,12 +74,25 @@ def trading_cycle():
 
 
 def close_check():
-    """Check for expired positions every 30 seconds."""
-    from src.trader import close_expired_positions
+    """Check for expired positions and DB/HL sync every 30 seconds."""
+    from src.trader import close_expired_positions, sync_position_state
     try:
         close_expired_positions()
     except Exception as e:
         logger.error(f"Close check failed: {e}")
+    try:
+        sync_position_state()
+    except Exception as e:
+        logger.error(f"Position sync failed: {e}")
+
+
+def emergency_check():
+    """Monitor position thresholds and trigger emergency MAGI if breached."""
+    from src.emergency import check_emergency
+    try:
+        check_emergency()
+    except Exception as e:
+        logger.error(f"Emergency check failed: {e}")
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
@@ -103,6 +119,16 @@ async def lifespan(app: FastAPI):
         seconds=30,
         id="close_check",
         name="Position Close Check",
+        max_instances=1,
+        coalesce=True,
+    )
+    # Emergency position monitor every 30 seconds
+    scheduler.add_job(
+        emergency_check,
+        "interval",
+        seconds=30,
+        id="emergency_check",
+        name="Emergency Position Monitor",
         max_instances=1,
         coalesce=True,
     )

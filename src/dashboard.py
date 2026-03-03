@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 import markdown as md
+from src.config import settings
 from src.database import Cycle, MagiVote, Trade, get_session
 
 router = APIRouter()
@@ -34,25 +35,42 @@ def _get_stats():
 
 
 def _get_open_trade():
-    with get_session() as session:
-        t = session.query(Trade).filter(Trade.status == "open").first()
-        if not t:
-            return None
-        now = datetime.utcnow()
-        elapsed = now - t.entry_time
-        close_at = t.entry_time + timedelta(hours=1)
+    from src.trader import get_live_position
+
+    try:
+        pos = get_live_position()
+    except Exception:
+        pos = None
+
+    if not pos:
+        return None
+
+    now = datetime.utcnow()
+    entry_time = pos["entry_time"]
+    if entry_time:
+        elapsed = now - entry_time
+        close_at = entry_time + timedelta(hours=settings.position_max_hours)
         remaining = max(timedelta(0), close_at - now)
-        return {
-            "id": t.id,
-            "coin": t.coin,
-            "side": t.side,
-            "entry_price": t.entry_price,
-            "qty": t.qty,
-            "size_usd": t.size_usd,
-            "entry_time": t.entry_time.strftime("%H:%M:%S UTC"),
-            "elapsed": str(elapsed).split(".")[0],
-            "close_in": str(remaining).split(".")[0],
-        }
+        entry_time_str = entry_time.strftime("%H:%M:%S UTC")
+        elapsed_str = str(elapsed).split(".")[0]
+        close_in_str = str(remaining).split(".")[0]
+    else:
+        entry_time_str = "—"
+        elapsed_str = "—"
+        close_in_str = "—"
+
+    return {
+        "id": pos["trade_id"],
+        "coin": pos["coin"],
+        "side": pos["side"],
+        "entry_price": pos["entry_price"],
+        "qty": pos["qty"],
+        "size_usd": pos["size_usd"],
+        "unrealized_pnl": pos["unrealized_pnl"],
+        "entry_time": entry_time_str,
+        "elapsed": elapsed_str,
+        "close_in": close_in_str,
+    }
 
 
 def _get_latest_magi():

@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     cycle_interval_minutes: int = 60        # How often Claude analyzes charts
     position_max_hours: int = 4             # Force-close positions after this many hours
 
+    # Emergency thresholds (configurable via .env)
+    emergency_loss_pct: float = 3.0         # Unrealized loss % of size_usd to trigger emergency
+    emergency_profit_pct: float = 5.0       # Unrealized profit % of size_usd to trigger emergency
+    emergency_price_move_pct: float = 2.0   # Price move % in N minutes to trigger emergency
+    emergency_price_move_minutes: int = 5   # Time window for price move detection
+    emergency_cooldown_minutes: int = 15    # Minimum interval between emergency cycles
+
     # Internals (not from .env)
     candle_count: int = 100
     limit_order_timeout_secs: int = 30

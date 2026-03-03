@@ -11,7 +11,7 @@ import subprocess
 from datetime import datetime
 
 from src.config import settings
-from src.database import Cycle, Trade, get_session
+from src.database import Cycle, get_session
 from src.magi import MagiSystem
 from src.notify import send_discord
 from src.trader import calc_pnl
@@ -63,6 +63,36 @@ DECISION: EXIT or HOLD
 REASON: （日本語で理由を記述）
 """
 
+_PROMPT_EMERGENCY = """\
+{context}
+
+---
+
+🚨 **緊急MAGI集会** 🚨
+通常のサイクルを中断し、緊急招集されました。
+
+**トリガー**: {emergency_reason}
+
+過去の振り返りが `/app/data/reflections/` に蓄積されています。
+Bash で `ls /app/data/reflections/` を確認し、関連しそうなファイルを Read ツールで参照してから判断してください。
+
+現在ポジション保有中:
+- サイド: {side}
+- エントリー価格: ${entry_price:,.2f}
+- 保有時間: {elapsed}
+- 含み損益: {pnl_sign}${pnl_usd:.2f}（推定）
+
+以下の{count}つのチャートを Read ツールで開いてください:
+{chart_list}
+
+**これは緊急事態です。** チャートと上記の状況を総合的に分析し、即座にポジションを閉じるべきか慎重に判断してください。
+リスク管理を最優先に、迅速かつ正確な判断を行ってください。
+
+最後に必ず以下のフォーマットで出力すること:
+DECISION: EXIT or HOLD
+REASON: （日本語で理由を記述。緊急トリガーに対する見解も含めること）
+"""
+
 
 def _fetch_mid(coin: str) -> float:
     """Fetch current mid price from Hyperliquid."""
@@ -91,40 +121,65 @@ def _build_chart_list(charts: list[tuple[str, str, str]]) -> str:
     return "\n".join(lines)
 
 
-def run_cycle(charts: list[tuple[str, str, str]], open_trade: Trade | None = None) -> dict:
+def run_cycle(
+    charts: list[tuple[str, str, str]],
+    live_position: dict | None = None,
+    emergency: str | None = None,
+) -> dict:
     """
     Run one trading cycle using the MAGI multi-agent voting system.
     charts: list of (interval, label, file_path) from generate_multi_tf_charts()
-    open_trade: expunged Trade object when in a position, or None.
+    live_position: dict from get_live_position() (HL source of truth), or None.
+    emergency: if set, the reason string for the emergency trigger.
     Returns dict with 'decision' and 'reasoning'.
     """
     coin = settings.trading_coin
     chart_paths = [path for _, _, path in charts]
     chart_list_str = _build_chart_list(charts)
     context = _load_context()
-    in_position = open_trade is not None
+    in_position = live_position is not None
 
     if in_position:
         now = datetime.utcnow()
-        elapsed_str = f"{int((now - open_trade.entry_time).total_seconds() // 60)}分"
-        try:
-            current_price = _fetch_mid(open_trade.coin)
-        except Exception as e:
-            logger.warning(f"Failed to fetch mid price: {e}. Using entry price.")
-            current_price = open_trade.entry_price
-        pnl = calc_pnl(open_trade.side, open_trade.entry_price, current_price, open_trade.size_usd)
-        base_prompt = _PROMPT_IN_POSITION.format(
+        entry_time = live_position.get("entry_time")
+        if entry_time:
+            elapsed_str = f"{int((now - entry_time).total_seconds() // 60)}分"
+        else:
+            elapsed_str = "不明"
+
+        # Use HL unrealized_pnl directly if available, otherwise calculate
+        if live_position.get("unrealized_pnl") is not None:
+            pnl = live_position["unrealized_pnl"]
+        else:
+            try:
+                current_price = _fetch_mid(live_position["coin"])
+            except Exception as e:
+                logger.warning(f"Failed to fetch mid price: {e}. Using entry price.")
+                current_price = live_position["entry_price"]
+            pnl = calc_pnl(
+                live_position["side"], live_position["entry_price"],
+                current_price, live_position["size_usd"],
+            )
+
+        prompt_vars = dict(
             context=context,
-            side=open_trade.side.upper(),
-            entry_price=open_trade.entry_price,
+            side=live_position["side"].upper(),
+            entry_price=live_position["entry_price"],
             elapsed=elapsed_str,
             pnl_sign="+" if pnl >= 0 else "",
             pnl_usd=abs(pnl),
             count=len(charts),
             chart_list=chart_list_str,
         )
+
+        if emergency:
+            prompt_vars["emergency_reason"] = emergency
+            base_prompt = _PROMPT_EMERGENCY.format(**prompt_vars)
+        else:
+            base_prompt = _PROMPT_IN_POSITION.format(**prompt_vars)
+        cycle_type = "EMERGENCY" if emergency else "MAGI"
         logger.info(
-            f"[MAGI] Starting cycle (IN POSITION: {open_trade.side.upper()}) "
+            f"[{cycle_type}] Starting cycle (IN POSITION: {live_position['side'].upper()}) "
             f"with {len(charts)} timeframe charts"
         )
     else:
