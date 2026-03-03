@@ -81,6 +81,10 @@ def close_expired_positions():
                     "archive_dir": f"/app/charts/trade_{trade.id}",
                 })
 
+            except RuntimeError as e:
+                # Position partially/not closed — keep as "open" so next cycle retries
+                logger.error(f"Close incomplete for trade_id={trade.id}: {e}")
+                session.commit()
             except Exception as e:
                 logger.error(f"Failed to close trade_id={trade.id}: {e}")
                 trade.status = "error"
@@ -90,12 +94,28 @@ def close_expired_positions():
         trigger_reflection(trade_info)
 
 
+def _get_remaining_position(info, coin: str) -> float | None:
+    """Return the absolute remaining position size on Hyperliquid, or None if no position."""
+    state = info.user_state(settings.hyperliquid_main_address)
+    positions = state.get("assetPositions", [])
+    pos = next(
+        (p["position"] for p in positions if p["position"]["coin"] == coin),
+        None,
+    )
+    if pos is None:
+        return None
+    szi = float(pos.get("szi", "0"))
+    return abs(szi) if szi != 0 else None
+
+
 def _close_position(trade: Trade) -> float:
     """
     Execute a close order on Hyperliquid.
     1. Try limit order at current mid for up to close_limit_timeout_secs.
     2. Fall back to market_close().
+    3. Verify position is actually closed; retry market close if not.
     Returns the exit price.
+    Raises RuntimeError if position cannot be fully closed.
     """
     import eth_account
     from hyperliquid.exchange import Exchange
@@ -116,6 +136,7 @@ def _close_position(trade: Trade) -> float:
     # Get current mid price for limit order
     mids = info.all_mids()
     mid = round(float(mids[coin]), 1)
+    exit_price = mid  # Track best known exit price
 
     logger.info(f"Placing limit close: {coin} is_buy={is_buy_to_close} qty={qty} px={mid}")
 
@@ -135,34 +156,55 @@ def _close_position(trade: Trade) -> float:
     if statuses:
         s = statuses[0]
         if "filled" in s:
-            return float(s["filled"]["avgPx"])
+            exit_price = float(s["filled"]["avgPx"])
         elif "resting" in s:
             oid = s["resting"]["oid"]
 
-    # Wait for fill
+    # Wait for limit order fill
     if oid:
         deadline = time.time() + settings.close_limit_timeout_secs
         while time.time() < deadline:
             time.sleep(5)
             open_orders = info.open_orders(settings.hyperliquid_main_address)
             if not any(o.get("oid") == oid for o in open_orders):
-                logger.info("Limit close filled!")
-                # Approximate fill price (actual fill may differ slightly)
+                logger.info("Limit close order no longer resting.")
                 mids2 = info.all_mids()
-                return float(mids2[coin])
+                exit_price = float(mids2[coin])
+                break
+        else:
+            # Not filled in time — cancel
+            logger.info("Limit close timeout — cancelling...")
+            exchange.cancel(coin, oid)
+            time.sleep(1)
 
-        # Not filled — cancel and use market close
-        logger.info("Limit close timeout — switching to market close...")
-        exchange.cancel(coin, oid)
-        time.sleep(1)
+    # Check if position is actually closed
+    remaining = _get_remaining_position(info, coin)
+    if remaining is not None:
+        logger.warning(
+            f"Position still open after limit close: {coin} remaining={remaining}"
+        )
+        # Retry with market close (up to 3 attempts with increasing slippage)
+        for attempt, slippage in enumerate([0.01, 0.03, 0.05], 1):
+            logger.info(
+                f"Market close retry {attempt}/3: {coin} sz={remaining} slippage={slippage}"
+            )
+            market_result = exchange.market_close(coin, sz=remaining, slippage=slippage)
+            statuses = (
+                market_result.get("response", {}).get("data", {}).get("statuses", [])
+            )
+            if statuses and "filled" in statuses[0]:
+                exit_price = float(statuses[0]["filled"]["avgPx"])
 
-    market_result = exchange.market_close(coin, sz=qty, slippage=0.01)
-    statuses = (
-        market_result.get("response", {}).get("data", {}).get("statuses", [])
-    )
-    if statuses and "filled" in statuses[0]:
-        return float(statuses[0]["filled"]["avgPx"])
+            time.sleep(2)
+            remaining = _get_remaining_position(info, coin)
+            if remaining is None:
+                logger.info(f"Position fully closed on attempt {attempt}.")
+                break
+        else:
+            # All retries exhausted — position still open
+            raise RuntimeError(
+                f"Failed to fully close {coin} position after 3 market-close retries. "
+                f"Remaining size: {remaining}"
+            )
 
-    # Ultimate fallback: return current mid
-    mids3 = info.all_mids()
-    return float(mids3[coin])
+    return exit_price
