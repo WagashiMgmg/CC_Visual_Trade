@@ -335,31 +335,10 @@ def sync_position_state():
             return
 
         # ── Case B: DB has no open trade, but HL has a position ──
+        # Do NOT auto-close. get_live_position() will return this position,
+        # so the normal trading cycle will pick it up and let MAGI deliberate.
         if db_trade is None and hl_pos is not None:
-            remaining = abs(float(hl_pos["szi"]))
             logger.warning(
                 f"[SYNC] No open trade in DB but HL has {coin} position "
-                f"(size={hl_pos['szi']}). Attempting to close orphaned position."
+                f"(size={hl_pos['szi']}). Will be handled by next trading cycle."
             )
-
-            import eth_account
-            from hyperliquid.exchange import Exchange
-
-            account = eth_account.Account.from_key(settings.hyperliquid_private_key)
-            exchange = Exchange(
-                account,
-                settings.api_url,
-                account_address=settings.hyperliquid_main_address,
-            )
-
-            try:
-                result = exchange.market_close(coin, sz=remaining, slippage=0.05)
-                statuses = (
-                    result.get("response", {}).get("data", {}).get("statuses", [])
-                )
-                filled = statuses and "filled" in statuses[0]
-                logger.info(
-                    f"[SYNC] Orphaned position close: filled={filled} result={statuses}"
-                )
-            except Exception as e:
-                logger.error(f"[SYNC] Failed to close orphaned {coin} position: {e}")
