@@ -227,6 +227,59 @@ def _get_next_cycle_at() -> str | None:
     return None
 
 
+def _get_rules():
+    """Parse AGENTS.md into structured sections."""
+    import os
+    import re as _re
+    path = "/app/AGENTS.md"
+    try:
+        with open(path) as f:
+            content = f.read()
+        mtime = os.path.getmtime(path)
+        updated = datetime.utcfromtimestamp(mtime).strftime("%Y-%m-%d %H:%M UTC")
+    except FileNotFoundError:
+        return None
+
+    sections = {"basic": [], "learned": [], "positive": []}
+    key_map = {
+        "基本ルール": "basic",
+        "学習済みルール": "learned",
+        "エントリー推奨条件": "positive",
+    }
+    current = None
+
+    for line in content.splitlines():
+        if line.startswith("## "):
+            current = None
+            for k, v in key_map.items():
+                if k in line:
+                    current = v
+                    break
+            continue
+        if current is None or not line.startswith("- "):
+            continue
+        text = line[2:].strip()
+        if not text or text.startswith("（"):
+            continue
+        # **Name**: description
+        m = _re.match(r"\*\*(.+?)\*\*[：:]\s*(.*)", text, _re.DOTALL)
+        if m:
+            sections[current].append({"name": m.group(1), "desc": m.group(2).strip()})
+        else:
+            # Basic rule: key: value ← note
+            m2 = _re.match(r"([^:：←]+)[：:]\s*(.+?)(?:\s+←\s*(.+))?$", text)
+            if m2:
+                sections[current].append({
+                    "name": m2.group(1).strip(),
+                    "desc": m2.group(2).strip(),
+                    "note": (m2.group(3) or "").strip(),
+                })
+            else:
+                sections[current].append({"name": "", "desc": text})
+
+    return {**sections, "updated": updated}
+
+
 def _get_all_cycles(limit=200):
     """Return full cycle data with votes, linked trades, and reflections."""
     with get_session() as session:
@@ -354,6 +407,14 @@ async def serve_chart(filename: str):
 @router.get("/api/pnl")
 async def api_pnl():
     return _get_pnl_series()
+
+
+@router.get("/rules", response_class=HTMLResponse)
+async def rules_page(request: Request):
+    return templates.TemplateResponse(
+        "rules.html",
+        {"request": request, "rules": _get_rules()},
+    )
 
 
 @router.get("/cycles", response_class=HTMLResponse)
