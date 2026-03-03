@@ -3,95 +3,18 @@
 
 {% block content %}
 {% if not rules %}
-  <div class="card"><div class="muted" style="padding:2rem;text-align:center;">AGENTS.md が見つかりません。</div></div>
+  <div class="card"><div class="muted" style="padding:2rem;text-align:center;">AGENTS.md が見つかりません。初回トレードの振り返り後に自動生成されます。</div></div>
 {% else %}
 
-<!-- Page header -->
 <div class="rules-header card">
   <div class="rules-header-title">Trading Rules</div>
   <div class="rules-header-meta">
-    <span class="rules-stat rules-stat-prohibition">
-      <span class="rules-stat-num">{{ rules.learned | length }}</span>
-      <span class="rules-stat-label">禁止・警戒</span>
-    </span>
-    <span class="rules-stat rules-stat-positive">
-      <span class="rules-stat-num">{{ rules.positive | length }}</span>
-      <span class="rules-stat-label">推奨条件</span>
-    </span>
-    <span class="rules-stat rules-stat-basic">
-      <span class="rules-stat-num">{{ rules.basic | length }}</span>
-      <span class="rules-stat-label">基本設定</span>
-    </span>
     <span class="rules-updated muted mono">Updated {{ rules.updated }}</span>
   </div>
 </div>
 
-<!-- Basic rules -->
-<div class="rules-section">
-  <div class="rules-section-header rules-section-header-basic">
-    <span class="rules-section-icon">⚙</span>
-    <span class="rules-section-title-text">基本ルール</span>
-    <span class="rules-section-subtitle">手動設定 · .env で変更可</span>
-  </div>
-  <div class="rules-basic-grid">
-    {% for r in rules.basic %}
-    <div class="rules-basic-item">
-      <div class="rules-basic-name">{{ r.name }}</div>
-      <div class="rules-basic-desc">{{ r.desc }}</div>
-      {% if r.note %}<div class="rules-basic-note">← {{ r.note }}</div>{% endif %}
-    </div>
-    {% endfor %}
-  </div>
-</div>
-
-<!-- Prohibition rules -->
-<div class="rules-section">
-  <div class="rules-section-header rules-section-header-prohibition">
-    <span class="rules-section-icon">⛔</span>
-    <span class="rules-section-title-text">学習済みルール</span>
-    <span class="rules-section-subtitle">振り返りから自動蓄積 · 最大10件</span>
-    <span class="rules-count-badge rules-count-prohibition">{{ rules.learned | length }} / 10</span>
-  </div>
-  {% if rules.learned %}
-    {% for r in rules.learned %}
-    <div class="rule-card rule-card-prohibition">
-      <div class="rule-card-inner">
-        <div class="rule-number">{{ loop.index }}</div>
-        <div class="rule-body">
-          <div class="rule-name">{{ r.name }}</div>
-          <div class="rule-desc">{{ r.desc }}</div>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="rules-empty">まだルールがありません。トレードの振り返りから自動追加されます。</div>
-  {% endif %}
-</div>
-
-<!-- Positive rules -->
-<div class="rules-section">
-  <div class="rules-section-header rules-section-header-positive">
-    <span class="rules-section-icon">✓</span>
-    <span class="rules-section-title-text">エントリー推奨条件</span>
-    <span class="rules-section-subtitle">振り返りから自動蓄積 · 最大5件</span>
-    <span class="rules-count-badge rules-count-positive">{{ rules.positive | length }} / 5</span>
-  </div>
-  {% if rules.positive %}
-    {% for r in rules.positive %}
-    <div class="rule-card rule-card-positive">
-      <div class="rule-card-inner">
-        <div class="rule-number rule-number-positive">{{ loop.index }}</div>
-        <div class="rule-body">
-          <div class="rule-name">{{ r.name }}</div>
-          <div class="rule-desc">{{ r.desc }}</div>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  {% else %}
-    <div class="rules-empty">まだ推奨条件がありません。トレードの振り返りから自動追加されます。</div>
-  {% endif %}
+<div class="card rules-md-body prose">
+  {{ rules.html | safe }}
 </div>
 
 {% endif %}

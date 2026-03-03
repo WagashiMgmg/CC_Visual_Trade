@@ -228,9 +228,7 @@ def _get_next_cycle_at() -> str | None:
 
 
 def _get_rules():
-    """Parse AGENTS.md into structured sections."""
-    import os
-    import re as _re
+    """Read AGENTS.md and convert to HTML."""
     path = "/app/AGENTS.md"
     try:
         with open(path) as f:
@@ -240,44 +238,8 @@ def _get_rules():
     except FileNotFoundError:
         return None
 
-    sections = {"basic": [], "learned": [], "positive": []}
-    key_map = {
-        "基本ルール": "basic",
-        "学習済みルール": "learned",
-        "エントリー推奨条件": "positive",
-    }
-    current = None
-
-    for line in content.splitlines():
-        if line.startswith("## "):
-            current = None
-            for k, v in key_map.items():
-                if k in line:
-                    current = v
-                    break
-            continue
-        if current is None or not line.startswith("- "):
-            continue
-        text = line[2:].strip()
-        if not text or text.startswith("（"):
-            continue
-        # **Name**: description
-        m = _re.match(r"\*\*(.+?)\*\*[：:]\s*(.*)", text, _re.DOTALL)
-        if m:
-            sections[current].append({"name": m.group(1), "desc": m.group(2).strip()})
-        else:
-            # Basic rule: key: value ← note
-            m2 = _re.match(r"([^:：←]+)[：:]\s*(.+?)(?:\s+←\s*(.+))?$", text)
-            if m2:
-                sections[current].append({
-                    "name": m2.group(1).strip(),
-                    "desc": m2.group(2).strip(),
-                    "note": (m2.group(3) or "").strip(),
-                })
-            else:
-                sections[current].append({"name": "", "desc": text})
-
-    return {**sections, "updated": updated}
+    html = md.markdown(content, extensions=["extra", "sane_lists"])
+    return {"html": html, "updated": updated}
 
 
 def _get_all_cycles(limit=200):

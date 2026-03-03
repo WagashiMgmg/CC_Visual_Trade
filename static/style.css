@@ -797,187 +797,30 @@ body {
   flex-wrap: wrap;
   flex: 1;
 }
-.rules-stat {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-}
-.rules-stat-num {
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1;
-}
-.rules-stat-label { font-size: 11px; opacity: .8; }
-.rules-stat-prohibition { background: rgba(248,81,73,.1);  color: var(--red); }
-.rules-stat-positive    { background: rgba(63,185,80,.1);  color: var(--green); }
-.rules-stat-basic       { background: rgba(88,166,255,.1); color: var(--blue); }
 .rules-updated {
   font-size: 11px;
   margin-left: auto;
 }
 
-/* Section */
-.rules-section { margin-bottom: 20px; }
-
-.rules-section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: var(--radius) var(--radius) 0 0;
-  margin-bottom: 0;
-}
-.rules-section-header-prohibition {
-  background: rgba(248,81,73,.07);
-  border: 1px solid rgba(248,81,73,.2);
-  border-bottom: none;
-}
-.rules-section-header-positive {
-  background: rgba(63,185,80,.07);
-  border: 1px solid rgba(63,185,80,.2);
-  border-bottom: none;
-}
-.rules-section-header-basic {
-  background: rgba(88,166,255,.07);
-  border: 1px solid rgba(88,166,255,.2);
-  border-bottom: none;
-  border-radius: var(--radius);
-  margin-bottom: 8px;
-}
-.rules-section-icon { font-size: 14px; }
-.rules-section-title-text {
+/* Markdown-rendered rules body */
+.rules-md-body {
+  padding: 20px 24px;
   font-size: 13px;
-  font-weight: 700;
-  letter-spacing: .02em;
+  line-height: 1.8;
 }
-.rules-section-subtitle {
-  font-size: 11px;
-  color: var(--muted);
-}
-.rules-count-badge {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-.rules-count-prohibition { background: rgba(248,81,73,.15); color: var(--red); }
-.rules-count-positive    { background: rgba(63,185,80,.15);  color: var(--green); }
-
-/* Basic rules grid */
-.rules-basic-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  padding: 12px 0 4px;
-}
-@media (max-width: 600px) { .rules-basic-grid { grid-template-columns: 1fr; } }
-
-.rules-basic-item {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--blue);
-  border-radius: 6px;
-  padding: 10px 14px;
-}
-.rules-basic-name {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--muted);
-  margin-bottom: 4px;
-}
-.rules-basic-desc {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-.rules-basic-note {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-  font-style: italic;
-}
-
-/* Rule cards */
-.rule-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0;
-  padding: 0;
-  transition: background .1s;
-}
-.rule-card:first-of-type { border-radius: 0; }
-.rule-card:last-of-type {
-  border-radius: 0 0 var(--radius) var(--radius);
-}
-.rule-card + .rule-card { border-top: none; }
-.rule-card:hover { background: var(--surface2); }
-
-.rule-card-prohibition { border-left: 4px solid rgba(248,81,73,.5); }
-.rule-card-positive    { border-left: 4px solid rgba(63,185,80,.5); }
-
-.rule-card-inner {
-  display: flex;
-  gap: 0;
-  align-items: stretch;
-}
-
-.rule-number {
-  flex-shrink: 0;
-  width: 44px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 16px;
-  font-size: 11px;
+.rules-md-body h2 {
+  font-size: 16px;
   font-weight: 800;
-  font-family: "SFMono-Regular", Consolas, monospace;
-  color: rgba(248,81,73,.5);
-  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-top: 1.5em;
 }
-.rule-number-positive { color: rgba(63,185,80,.6); }
-
-.rule-body {
-  flex: 1;
-  padding: 14px 18px;
-  min-width: 0;
-}
-
-.rule-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 6px;
-  line-height: 1.4;
-}
-
-.rule-desc {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.7;
-}
-
-/* Empty state */
-.rules-empty {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-top: none;
-  border-radius: 0 0 var(--radius) var(--radius);
-  padding: 24px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 13px;
-  font-style: italic;
+.rules-md-body h2:first-child {
+  margin-top: 0;
 }
 
 @media (max-width: 600px) {
   .rules-header { gap: 12px; padding: 12px 14px; }
   .rules-header-title { font-size: 17px; }
   .rules-updated { display: none; }
-  .rule-body { padding: 12px 14px; }
-  .rule-number { width: 36px; font-size: 10px; }
 }
