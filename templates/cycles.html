@@ -2,7 +2,7 @@
 {% set page = "cycles" %}
 
 {% block content %}
-<div class="card" style="margin-bottom: var(--gap);">
+<div class="card cycles-summary-card">
   <div class="card-label">Cycle History — {{ cycles | length }} cycles</div>
   {% if not cycles %}
     <div class="muted" style="padding:2rem;text-align:center;">No cycles yet.</div>
@@ -12,25 +12,35 @@
 {% for c in cycles %}
 <div class="cycle-block card" id="cycle-{{ c.id }}">
 
-  <!-- Header row -->
-  <div class="cycle-header">
-    <span class="cycle-id muted mono">#{{ c.id }}</span>
-    <span class="cycle-ts mono small muted">{{ c.timestamp }}</span>
-    <span class="cycle-coin">{{ c.coin }}</span>
-    {% if c.decision %}
-      <span class="badge badge-{{ c.decision | lower }}">{{ c.decision }}</span>
-    {% else %}
-      <span class="badge badge-interrupted">—</span>
-    {% endif %}
-    {% if c.action %}
-      <span class="cycle-action-label muted small">→</span>
-      <span class="badge-status badge-status-{{ c.action }}">{{ c.action }}</span>
-    {% endif %}
-    {% if c.skip_reason %}
-      <span class="cycle-skip-reason muted small">{{ c.skip_reason }}</span>
-    {% endif %}
-    <button class="cycle-toggle" onclick="toggleCycle('cycle-{{ c.id }}')" title="Expand / Collapse">▾</button>
+  <!-- Header: clickable, collapses on mobile -->
+  <div class="cycle-header" onclick="toggleCycle('cycle-{{ c.id }}')">
+
+    <!-- Left: coin + badges -->
+    <div class="cycle-header-main">
+      <span class="cycle-coin">{{ c.coin }}</span>
+      {% if c.decision %}
+        <span class="badge badge-{{ c.decision | lower }}">{{ c.decision }}</span>
+      {% else %}
+        <span class="badge badge-interrupted">—</span>
+      {% endif %}
+      {% if c.action %}
+        <span class="cycle-arrow muted">→</span>
+        <span class="badge-status badge-status-{{ c.action }}">{{ c.action }}</span>
+      {% endif %}
+    </div>
+
+    <!-- Right: id + timestamp + toggle -->
+    <div class="cycle-header-meta">
+      <span class="cycle-id muted mono">#{{ c.id }}</span>
+      <span class="cycle-ts mono muted">{{ c.timestamp }}</span>
+      <button class="cycle-toggle" id="btn-cycle-{{ c.id }}" title="Expand / Collapse">▾</button>
+    </div>
+
   </div>
+
+  {% if c.skip_reason %}
+  <div class="cycle-skip-reason">{{ c.skip_reason }}</div>
+  {% endif %}
 
   <!-- Expandable body -->
   <div class="cycle-body" id="body-cycle-{{ c.id }}">
@@ -41,13 +51,17 @@
       <div class="cycle-section-title">MAGI Votes</div>
       {% for round_num, votes in c.rounds.items() %}
       <div class="vote-round">
-        <span class="vote-round-label">Round {{ round_num + 1 }}</span>
+        {% if c.rounds | length > 1 %}
+        <div class="vote-round-label">Round {{ round_num + 1 }}</div>
+        {% endif %}
         <div class="vote-grid">
           {% for v in votes %}
           <div class="vote-card vote-card-{{ v.decision | lower }}">
-            <div class="vote-agent">{{ v.agent | capitalize }}</div>
-            <div class="vote-decision badge badge-{{ v.decision | lower }}">{{ v.decision }}</div>
-            <div class="vote-ts mono" style="font-size:10px;color:var(--muted)">{{ v.timestamp }}</div>
+            <div class="vote-card-header">
+              <span class="vote-agent">{{ v.agent | capitalize }}</span>
+              <span class="badge badge-{{ v.decision | lower }}">{{ v.decision }}</span>
+              <span class="vote-ts mono">{{ v.timestamp }}</span>
+            </div>
             {% if v.reasoning %}
             <div class="vote-reasoning">{{ v.reasoning }}</div>
             {% endif %}
@@ -81,17 +95,15 @@
           <span class="muted small">({{ "WIN" if t.pnl_usd > 0 else ("LOSS" if t.pnl_usd < 0 else "BE") }})</span>
         {% endif %}
       </div>
-      <div class="trade-detail-row">
-        <span class="label">Entry</span><span class="mono">${{ "{:,.2f}".format(t.entry_price) }}</span>
-        <span class="label" style="margin-left:20px;">Exit</span>
-        <span class="mono">{% if t.exit_price %}${{ "{:,.2f}".format(t.exit_price) }}{% else %}—{% endif %}</span>
-        <span class="label" style="margin-left:20px;">Time</span><span class="mono small">{{ t.entry_time }}</span>
+      <dl class="trade-kv">
+        <dt>Entry</dt><dd class="mono">${{ "{:,.2f}".format(t.entry_price) }}</dd>
+        <dt>Exit</dt><dd class="mono">{% if t.exit_price %}${{ "{:,.2f}".format(t.exit_price) }}{% else %}—{% endif %}</dd>
+        <dt>Time</dt><dd class="mono">{{ t.entry_time }}</dd>
         {% if t.duration %}
-          <span class="label" style="margin-left:20px;">Duration</span><span class="mono small">{{ t.duration }}</span>
+        <dt>Duration</dt><dd class="mono">{{ t.duration }}</dd>
         {% endif %}
-        <span class="label" style="margin-left:20px;">Status</span>
-        <span class="badge-status badge-status-{{ t.status }}">{{ t.status }}</span>
-      </div>
+        <dt>Status</dt><dd><span class="badge-status badge-status-{{ t.status }}">{{ t.status }}</span></dd>
+      </dl>
 
       {% if t.reflection %}
       <details class="reflection-details">
@@ -110,21 +122,19 @@
 
 {% block scripts %}
 <script>
-  // Start all cycles collapsed
   document.querySelectorAll('.cycle-body').forEach(el => {
     el.style.display = 'none';
   });
 
   function toggleCycle(id) {
     const body = document.getElementById('body-' + id);
-    const btn  = document.querySelector('#' + id + ' .cycle-toggle');
+    const btn  = document.getElementById('btn-' + id);
     if (!body) return;
     const open = body.style.display !== 'none';
     body.style.display = open ? 'none' : 'block';
     if (btn) btn.textContent = open ? '▾' : '▴';
   }
 
-  // Expand first cycle by default
   const first = document.querySelector('.cycle-block');
   if (first) toggleCycle(first.id);
 </script>

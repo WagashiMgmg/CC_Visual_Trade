@@ -5,6 +5,7 @@
 <div class="card">
   <div class="card-label">Trade History ({{ trades | length }} trades)</div>
   {% if trades %}
+    <div class="table-scroll">
     <table class="table table-full">
       <thead>
         <tr>
@@ -49,6 +50,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   {% else %}
     <div class="muted" style="padding:2rem;text-align:center;">No trades yet.</div>
   {% endif %}

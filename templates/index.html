@@ -162,6 +162,24 @@
         <div class="magi-lbl-vote">{{ mv.decision if mv else 'OFFLINE' }}</div>
       </div>
 
+      <!-- Mobile-only decision overlay (top-left empty area) -->
+      <div class="magi-lbl magi-lbl-mobile-decision">
+        <div class="magi-signal magi-signal-{{ (magi.consensus or 'hold') | lower }}">
+          {{ magi.consensus or 'HOLD' }}
+        </div>
+      </div>
+
+      <!-- Mobile-only status overlay (top-right empty area) -->
+      <div class="magi-lbl magi-lbl-mobile-status" id="magi-mobile-status">
+        <div class="magi-status-badge magi-running-badge">審議中</div>
+        {% if magi.rounds > 1 %}
+          <div class="magi-status-badge magi-deliberating magi-result-badge">再審議で決定</div>
+          <div class="magi-round-label magi-result-badge">第{{ magi.rounds - 1 }}回再審議</div>
+        {% else %}
+          <div class="magi-status-badge magi-status-resolved magi-result-badge">即時決定</div>
+        {% endif %}
+      </div>
+
     </div>
 
     <!-- Right: 決議 -->
@@ -233,6 +251,7 @@
   <div class="card">
     <div class="card-label">Recent Cycles</div>
     {% if recent_cycles %}
+      <div class="table-scroll">
       <table class="table">
         <thead>
           <tr>
@@ -255,6 +274,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     {% else %}
       <div class="muted small">No cycles yet.</div>
     {% endif %}
@@ -264,6 +284,7 @@
   <div class="card">
     <div class="card-label">Recent Trades <a href="/trades" class="card-link">all →</a></div>
     {% if recent_trades %}
+      <div class="table-scroll">
       <table class="table">
         <thead>
           <tr>
@@ -296,6 +317,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     {% else %}
       <div class="muted small">No trades yet.</div>
     {% endif %}
@@ -345,10 +367,14 @@
       const r = await fetch('/api/status');
       const data = await r.json();
 
-      // Toggle cycle-active on MAGI right panel
+      // Toggle cycle-active on MAGI right panel + mobile status overlay
       const magiRight = document.getElementById('magi-side-right');
       if (magiRight) {
         magiRight.classList.toggle('cycle-active', !!data.cycle_running);
+      }
+      const magiMobile = document.getElementById('magi-mobile-status');
+      if (magiMobile) {
+        magiMobile.classList.toggle('cycle-active', !!data.cycle_running);
       }
 
       // Update chart grid if new charts arrived
