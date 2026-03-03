@@ -107,9 +107,9 @@
     {% set C_AGREE    = '#3a6ba8' %}
     {% set C_DISAGREE = '#b82020' %}
     {% set C_OFF      = '#161b22' %}
-    {% set bv_col = C_AGREE if bv and bv.agrees else (C_DISAGREE if bv and not bv.agrees else C_OFF) %}
-    {% set cv_col = C_AGREE if cv and cv.agrees else (C_DISAGREE if cv and not cv.agrees else C_OFF) %}
-    {% set mv_col = C_AGREE if mv and mv.agrees else (C_DISAGREE if mv and not mv.agrees else C_OFF) %}
+    {% set bv_col = C_AGREE if bv and bv.agrees == true else (C_DISAGREE if bv and bv.agrees == false else C_OFF) %}
+    {% set cv_col = C_AGREE if cv and cv.agrees == true else (C_DISAGREE if cv and cv.agrees == false else C_OFF) %}
+    {% set mv_col = C_AGREE if mv and mv.agrees == true else (C_DISAGREE if mv and mv.agrees == false else C_OFF) %}
 
     <div class="magi-center">
 
@@ -142,13 +142,13 @@
       <!-- Text labels (absolute, matching SVG regions) -->
 
       <!-- Gemini label (top trapezoid) -->
-      <div class="magi-lbl magi-lbl-balt {{ 'lbl-agree' if bv and bv.agrees else ('lbl-disagree' if bv else 'lbl-offline') }}">
+      <div class="magi-lbl magi-lbl-balt {{ 'lbl-agree' if bv and bv.agrees == true else ('lbl-disagree' if bv and bv.agrees == false else 'lbl-offline') }}">
         <div class="magi-lbl-name">Gemini</div>
         <div class="magi-lbl-vote">{{ bv.decision if bv else 'OFFLINE' }}</div>
       </div>
 
       <!-- Codex label (bottom-left) -->
-      <div class="magi-lbl magi-lbl-casp {{ 'lbl-agree' if cv and cv.agrees else ('lbl-disagree' if cv else 'lbl-offline') }}">
+      <div class="magi-lbl magi-lbl-casp {{ 'lbl-agree' if cv and cv.agrees == true else ('lbl-disagree' if cv and cv.agrees == false else 'lbl-offline') }}">
         <div class="magi-lbl-name">Codex</div>
         <div class="magi-lbl-vote">{{ cv.decision if cv else 'OFFLINE' }}</div>
       </div>
@@ -157,7 +157,7 @@
       <div class="magi-lbl magi-lbl-junc"></div>
 
       <!-- Claude label (bottom-right) -->
-      <div class="magi-lbl magi-lbl-melc {{ 'lbl-agree' if mv and mv.agrees else ('lbl-disagree' if mv else 'lbl-offline') }}">
+      <div class="magi-lbl magi-lbl-melc {{ 'lbl-agree' if mv and mv.agrees == true else ('lbl-disagree' if mv and mv.agrees == false else 'lbl-offline') }}">
         <div class="magi-lbl-name">Claude</div>
         <div class="magi-lbl-vote">{{ mv.decision if mv else 'OFFLINE' }}</div>
       </div>
