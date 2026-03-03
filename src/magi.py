@@ -71,6 +71,17 @@ class ClaudeAgent(MagiAgent):
     name    = "melchior"
     display = "Melchior"
 
+    def _check_available_quota(self) -> bool:
+        """Return True if claude CLI is reachable."""
+        try:
+            result = subprocess.run(
+                ["claude", "--version"],
+                capture_output=True, timeout=15,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
     def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
         try:
             result = subprocess.run(
@@ -86,19 +97,25 @@ class ClaudeAgent(MagiAgent):
                 cwd="/app",
                 env=os.environ.copy(),
             )
-            output = result.stdout
             if result.stderr:
                 logger.debug(f"[Melchior] stderr: {result.stderr[:200]}")
-            return _parse_vote(output)
+            if result.returncode != 0:
+                logger.error(f"[Melchior] non-zero exit ({result.returncode}) — marking OFFLINE")
+                self.available = False
+                return None
+            return _parse_vote(result.stdout)
         except subprocess.TimeoutExpired:
-            logger.error("[Melchior] timed out")
-            return _parse_vote("DECISION: HOLD\nREASON: タイムアウト")
+            logger.error("[Melchior] timed out — marking OFFLINE")
+            self.available = False
+            return None
         except FileNotFoundError:
-            logger.error("[Melchior] claude CLI not found")
-            return _parse_vote("DECISION: HOLD\nREASON: claude CLIが見つかりません")
+            logger.error("[Melchior] claude CLI not found — marking OFFLINE")
+            self.available = False
+            return None
         except Exception as e:
-            logger.error(f"[Melchior] error: {e}")
-            return _parse_vote("DECISION: HOLD\nREASON: エラー発生")
+            logger.error(f"[Melchior] error: {e} — marking OFFLINE")
+            self.available = False
+            return None
 
 
 # ── Balthazar (Gemini CLI) ────────────────────────────────────────────────────
@@ -122,7 +139,8 @@ class GeminiAgent(MagiAgent):
         # Re-check availability each cycle (quota may have reset)
         if not self.available:
             if not self._check_available_quota():
-                return _parse_vote("DECISION: HOLD\nREASON: Balthazar OFFLINE（全モデルクォータ枯渇）")
+                logger.info("[Balthazar] still OFFLINE — abstaining")
+                return None
             self.available = True
             logger.info("[Balthazar] quota restored, back ONLINE")
         chart_refs = " ".join(f"@{p}" for p in charts)
