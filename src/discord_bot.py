@@ -23,7 +23,7 @@ async def _take_screenshot() -> bytes:
         browser = await p.chromium.launch()
         page = await browser.new_page(viewport={"width": 1400, "height": 900})
         await page.goto("http://localhost:8080", wait_until="networkidle", timeout=15000)
-        data = await page.screenshot(full_page=False)
+        data = await page.screenshot(full_page=True)
         await browser.close()
     return data
 
