@@ -1,6 +1,9 @@
 # Secrets
 .env
 
+# Learning log (managed by reflection system)
+AGENTS.md
+
 # Generated data
 data/
 charts/
