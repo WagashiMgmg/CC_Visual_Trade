@@ -125,6 +125,68 @@ CC_Visual_Trade/
 └── data/                    # SQLite DB
 ```
 
+## 外部公開 — Cloudflare Quick Tunnel
+
+ダッシュボードを外部から確認したい場合は **Cloudflare Quick Tunnel** が使えます（無料・アカウント不要）。
+
+### インストール（初回のみ）
+
+```bash
+mkdir -p ~/.local/bin
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+  -o ~/.local/bin/cloudflared
+chmod +x ~/.local/bin/cloudflared
+```
+
+### 起動
+
+```bash
+./start_tunnel.sh
+```
+
+- ランダムな URL（例: `https://xxxx-yyyy.trycloudflare.com`）が発行されます
+- URL が `data/tunnel_url` に保存され、Discord bot が起動中なら自動通知します
+
+### ライフサイクル
+
+| 操作 | cloudflared への影響 |
+|------|---------------------|
+| `docker compose restart` | **影響なし** — トンネルはそのまま維持 |
+| `docker compose up --build` | **影響なし** — トンネルはそのまま維持 |
+| `docker compose down` | **影響なし** — トンネルはそのまま維持 |
+| **ホストを再起動** | cloudflared が落ちる → 再起動が必要 |
+| cloudflared を手動で再起動 | URL が**変わる** |
+
+> cloudflared はホストのプロセスなので Docker とは完全に独立しています。
+> Quick Tunnel の URL はプロセスを起動するたびにランダムに変わります。
+
+### 停止
+
+```bash
+pkill -f "cloudflared tunnel"
+```
+
+### ホスト再起動後の手順
+
+```bash
+# 1. トンネルを再起動（新しい URL が Discord に通知される）
+./start_tunnel.sh
+
+# 2. Docker も落ちている場合は合わせて起動
+docker compose up -d
+```
+
+### Discord への URL 通知
+
+`DISCORD_BOT_TOKEN` と `DISCORD_CHANNEL_ID` が `.env` に設定されていれば、
+`start_tunnel.sh` 実行後に Docker を再起動するだけで Discord に URL が届きます。
+
+```bash
+./start_tunnel.sh && docker compose restart app
+```
+
+---
+
 ## プロンプトのカスタマイズ
 
 `prompt/context.md` を編集するだけで Claude への指示を変更できます。

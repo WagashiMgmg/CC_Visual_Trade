@@ -227,6 +227,70 @@ def _get_next_cycle_at() -> str | None:
     return None
 
 
+def _get_all_cycles(limit=200):
+    """Return full cycle data with votes, linked trades, and reflections."""
+    with get_session() as session:
+        from src.database import MagiVote, Reflection, Trade
+
+        cycles = (
+            session.query(Cycle)
+            .order_by(Cycle.id.desc())
+            .limit(limit)
+            .all()
+        )
+        result = []
+        for c in cycles:
+            # Votes grouped by round
+            all_votes = (
+                session.query(MagiVote)
+                .filter(MagiVote.cycle_id == c.id)
+                .order_by(MagiVote.round, MagiVote.agent_name)
+                .all()
+            )
+            rounds: dict[int, list] = {}
+            for v in all_votes:
+                rounds.setdefault(v.round, []).append({
+                    "agent": v.agent_name,
+                    "decision": v.decision,
+                    "reasoning": v.reasoning or "",
+                    "timestamp": v.timestamp.strftime("%H:%M:%S") if v.timestamp else "",
+                })
+
+            # Linked trade
+            trade = session.query(Trade).filter(Trade.cycle_id == c.id).first()
+            trade_data = None
+            if trade:
+                duration = ""
+                if trade.exit_time and trade.entry_time:
+                    duration = str(trade.exit_time - trade.entry_time).split(".")[0]
+                # Reflection
+                refl = session.query(Reflection).filter(Reflection.trade_id == trade.id).first()
+                trade_data = {
+                    "id": trade.id,
+                    "side": trade.side,
+                    "entry_price": trade.entry_price,
+                    "exit_price": trade.exit_price,
+                    "pnl_usd": trade.pnl_usd,
+                    "status": trade.status,
+                    "entry_time": trade.entry_time.strftime("%m/%d %H:%M") if trade.entry_time else "",
+                    "duration": duration,
+                    "reflection": refl.reflection_text if refl else None,
+                }
+
+            result.append({
+                "id": c.id,
+                "timestamp": c.timestamp.strftime("%Y-%m-%d %H:%M UTC") if c.timestamp else "",
+                "coin": c.coin,
+                "decision": c.ai_decision,
+                "reasoning": md.markdown(c.ai_reasoning) if c.ai_reasoning else "",
+                "action": c.action_taken,
+                "skip_reason": c.skip_reason or "",
+                "rounds": rounds,
+                "trade": trade_data,
+            })
+        return result
+
+
 def _get_recent_cycles(limit=10):
     with get_session() as session:
         cycles = (
@@ -290,6 +354,17 @@ async def serve_chart(filename: str):
 @router.get("/api/pnl")
 async def api_pnl():
     return _get_pnl_series()
+
+
+@router.get("/cycles", response_class=HTMLResponse)
+async def cycles_page(request: Request):
+    return templates.TemplateResponse(
+        "cycles.html",
+        {
+            "request": request,
+            "cycles": _get_all_cycles(200),
+        },
+    )
 
 
 @router.get("/api/status")
