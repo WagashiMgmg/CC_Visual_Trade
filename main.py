@@ -86,6 +86,15 @@ def close_check():
         logger.error(f"Position sync failed: {e}")
 
 
+def emergency_check():
+    """Monitor position thresholds and trigger emergency MAGI if breached."""
+    from src.emergency import check_emergency
+    try:
+        check_emergency()
+    except Exception as e:
+        logger.error(f"Emergency check failed: {e}")
+
+
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
 scheduler = BackgroundScheduler(timezone="UTC")
@@ -110,6 +119,16 @@ async def lifespan(app: FastAPI):
         seconds=30,
         id="close_check",
         name="Position Close Check",
+        max_instances=1,
+        coalesce=True,
+    )
+    # Emergency position monitor every 30 seconds
+    scheduler.add_job(
+        emergency_check,
+        "interval",
+        seconds=30,
+        id="emergency_check",
+        name="Emergency Position Monitor",
         max_instances=1,
         coalesce=True,
     )

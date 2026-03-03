@@ -63,6 +63,36 @@ DECISION: EXIT or HOLD
 REASON: （日本語で理由を記述）
 """
 
+_PROMPT_EMERGENCY = """\
+{context}
+
+---
+
+🚨 **緊急MAGI集会** 🚨
+通常のサイクルを中断し、緊急招集されました。
+
+**トリガー**: {emergency_reason}
+
+過去の振り返りが `/app/data/reflections/` に蓄積されています。
+Bash で `ls /app/data/reflections/` を確認し、関連しそうなファイルを Read ツールで参照してから判断してください。
+
+現在ポジション保有中:
+- サイド: {side}
+- エントリー価格: ${entry_price:,.2f}
+- 保有時間: {elapsed}
+- 含み損益: {pnl_sign}${pnl_usd:.2f}（推定）
+
+以下の{count}つのチャートを Read ツールで開いてください:
+{chart_list}
+
+**これは緊急事態です。** チャートと上記の状況を総合的に分析し、即座にポジションを閉じるべきか慎重に判断してください。
+リスク管理を最優先に、迅速かつ正確な判断を行ってください。
+
+最後に必ず以下のフォーマットで出力すること:
+DECISION: EXIT or HOLD
+REASON: （日本語で理由を記述。緊急トリガーに対する見解も含めること）
+"""
+
 
 def _fetch_mid(coin: str) -> float:
     """Fetch current mid price from Hyperliquid."""
@@ -91,11 +121,16 @@ def _build_chart_list(charts: list[tuple[str, str, str]]) -> str:
     return "\n".join(lines)
 
 
-def run_cycle(charts: list[tuple[str, str, str]], live_position: dict | None = None) -> dict:
+def run_cycle(
+    charts: list[tuple[str, str, str]],
+    live_position: dict | None = None,
+    emergency: str | None = None,
+) -> dict:
     """
     Run one trading cycle using the MAGI multi-agent voting system.
     charts: list of (interval, label, file_path) from generate_multi_tf_charts()
     live_position: dict from get_live_position() (HL source of truth), or None.
+    emergency: if set, the reason string for the emergency trigger.
     Returns dict with 'decision' and 'reasoning'.
     """
     coin = settings.trading_coin
@@ -126,7 +161,7 @@ def run_cycle(charts: list[tuple[str, str, str]], live_position: dict | None = N
                 current_price, live_position["size_usd"],
             )
 
-        base_prompt = _PROMPT_IN_POSITION.format(
+        prompt_vars = dict(
             context=context,
             side=live_position["side"].upper(),
             entry_price=live_position["entry_price"],
@@ -136,8 +171,15 @@ def run_cycle(charts: list[tuple[str, str, str]], live_position: dict | None = N
             count=len(charts),
             chart_list=chart_list_str,
         )
+
+        if emergency:
+            prompt_vars["emergency_reason"] = emergency
+            base_prompt = _PROMPT_EMERGENCY.format(**prompt_vars)
+        else:
+            base_prompt = _PROMPT_IN_POSITION.format(**prompt_vars)
+        cycle_type = "EMERGENCY" if emergency else "MAGI"
         logger.info(
-            f"[MAGI] Starting cycle (IN POSITION: {live_position['side'].upper()}) "
+            f"[{cycle_type}] Starting cycle (IN POSITION: {live_position['side'].upper()}) "
             f"with {len(charts)} timeframe charts"
         )
     else:
