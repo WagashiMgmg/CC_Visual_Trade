@@ -94,8 +94,11 @@ def close_expired_positions():
         trigger_reflection(trade_info)
 
 
-def _get_remaining_position(info, coin: str) -> float | None:
-    """Return the absolute remaining position size on Hyperliquid, or None if no position."""
+def _get_hl_position(info, coin: str) -> dict | None:
+    """
+    Return Hyperliquid position dict for *coin*, or None if flat.
+    Keys: szi (signed size string), entryPx, unrealizedPnl, ...
+    """
     state = info.user_state(settings.hyperliquid_main_address)
     positions = state.get("assetPositions", [])
     pos = next(
@@ -104,8 +107,17 @@ def _get_remaining_position(info, coin: str) -> float | None:
     )
     if pos is None:
         return None
-    szi = float(pos.get("szi", "0"))
-    return abs(szi) if szi != 0 else None
+    if float(pos.get("szi", "0")) == 0:
+        return None
+    return pos
+
+
+def _get_remaining_position(info, coin: str) -> float | None:
+    """Return the absolute remaining position size on Hyperliquid, or None if no position."""
+    pos = _get_hl_position(info, coin)
+    if pos is None:
+        return None
+    return abs(float(pos["szi"]))
 
 
 def _close_position(trade: Trade) -> float:
@@ -208,3 +220,87 @@ def _close_position(trade: Trade) -> float:
             )
 
     return exit_price
+
+
+def sync_position_state():
+    """
+    Reconcile DB trade status with actual Hyperliquid position.
+    Called every 30 seconds alongside close_expired_positions.
+
+    Handles two mismatch cases:
+      A) DB=open but HL=flat  → mark trade as closed (liquidated / manually closed)
+      B) DB=no open but HL=has position → orphaned position, attempt market close
+    """
+    if settings.dry_run:
+        return
+
+    from hyperliquid.info import Info
+
+    coin = settings.trading_coin
+    info = Info(settings.api_url, skip_ws=True)
+    hl_pos = _get_hl_position(info, coin)
+
+    with get_session() as session:
+        db_trade = session.query(Trade).filter(Trade.status == "open").first()
+
+        # ── Case A: DB says open, but HL is flat ──
+        if db_trade and hl_pos is None:
+            mids = info.all_mids()
+            exit_price = float(mids[coin])
+            pnl = calc_pnl(db_trade.side, db_trade.entry_price, exit_price, db_trade.size_usd)
+            exit_time = datetime.utcnow()
+
+            db_trade.exit_price = exit_price
+            db_trade.exit_time = exit_time
+            db_trade.pnl_usd = pnl
+            db_trade.status = "closed"
+            session.commit()
+
+            logger.warning(
+                f"[SYNC] DB had open trade_id={db_trade.id} but HL position is flat. "
+                f"Marked closed (exit≈{exit_price:.2f}, pnl≈{pnl:.2f}). "
+                f"Likely liquidated or manually closed."
+            )
+
+            trigger_reflection({
+                "trade_id": db_trade.id,
+                "coin": db_trade.coin,
+                "side": db_trade.side,
+                "entry_price": db_trade.entry_price,
+                "exit_price": exit_price,
+                "pnl_usd": pnl,
+                "entry_time": db_trade.entry_time,
+                "exit_time": exit_time,
+                "archive_dir": f"/app/charts/trade_{db_trade.id}",
+            })
+            return
+
+        # ── Case B: DB has no open trade, but HL has a position ──
+        if db_trade is None and hl_pos is not None:
+            remaining = abs(float(hl_pos["szi"]))
+            logger.warning(
+                f"[SYNC] No open trade in DB but HL has {coin} position "
+                f"(size={hl_pos['szi']}). Attempting to close orphaned position."
+            )
+
+            import eth_account
+            from hyperliquid.exchange import Exchange
+
+            account = eth_account.Account.from_key(settings.hyperliquid_private_key)
+            exchange = Exchange(
+                account,
+                settings.api_url,
+                account_address=settings.hyperliquid_main_address,
+            )
+
+            try:
+                result = exchange.market_close(coin, sz=remaining, slippage=0.05)
+                statuses = (
+                    result.get("response", {}).get("data", {}).get("statuses", [])
+                )
+                filled = statuses and "filled" in statuses[0]
+                logger.info(
+                    f"[SYNC] Orphaned position close: filled={filled} result={statuses}"
+                )
+            except Exception as e:
+                logger.error(f"[SYNC] Failed to close orphaned {coin} position: {e}")

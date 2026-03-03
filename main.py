@@ -71,12 +71,16 @@ def trading_cycle():
 
 
 def close_check():
-    """Check for expired positions every 30 seconds."""
-    from src.trader import close_expired_positions
+    """Check for expired positions and DB/HL sync every 30 seconds."""
+    from src.trader import close_expired_positions, sync_position_state
     try:
         close_expired_positions()
     except Exception as e:
         logger.error(f"Close check failed: {e}")
+    try:
+        sync_position_state()
+    except Exception as e:
+        logger.error(f"Position sync failed: {e}")
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
