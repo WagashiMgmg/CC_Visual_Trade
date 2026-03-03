@@ -11,7 +11,7 @@ import subprocess
 from datetime import datetime
 
 from src.config import settings
-from src.database import Cycle, Trade, get_session
+from src.database import Cycle, get_session
 from src.magi import MagiSystem
 from src.notify import send_discord
 from src.trader import calc_pnl
@@ -91,32 +91,45 @@ def _build_chart_list(charts: list[tuple[str, str, str]]) -> str:
     return "\n".join(lines)
 
 
-def run_cycle(charts: list[tuple[str, str, str]], open_trade: Trade | None = None) -> dict:
+def run_cycle(charts: list[tuple[str, str, str]], live_position: dict | None = None) -> dict:
     """
     Run one trading cycle using the MAGI multi-agent voting system.
     charts: list of (interval, label, file_path) from generate_multi_tf_charts()
-    open_trade: expunged Trade object when in a position, or None.
+    live_position: dict from get_live_position() (HL source of truth), or None.
     Returns dict with 'decision' and 'reasoning'.
     """
     coin = settings.trading_coin
     chart_paths = [path for _, _, path in charts]
     chart_list_str = _build_chart_list(charts)
     context = _load_context()
-    in_position = open_trade is not None
+    in_position = live_position is not None
 
     if in_position:
         now = datetime.utcnow()
-        elapsed_str = f"{int((now - open_trade.entry_time).total_seconds() // 60)}分"
-        try:
-            current_price = _fetch_mid(open_trade.coin)
-        except Exception as e:
-            logger.warning(f"Failed to fetch mid price: {e}. Using entry price.")
-            current_price = open_trade.entry_price
-        pnl = calc_pnl(open_trade.side, open_trade.entry_price, current_price, open_trade.size_usd)
+        entry_time = live_position.get("entry_time")
+        if entry_time:
+            elapsed_str = f"{int((now - entry_time).total_seconds() // 60)}分"
+        else:
+            elapsed_str = "不明"
+
+        # Use HL unrealized_pnl directly if available, otherwise calculate
+        if live_position.get("unrealized_pnl") is not None:
+            pnl = live_position["unrealized_pnl"]
+        else:
+            try:
+                current_price = _fetch_mid(live_position["coin"])
+            except Exception as e:
+                logger.warning(f"Failed to fetch mid price: {e}. Using entry price.")
+                current_price = live_position["entry_price"]
+            pnl = calc_pnl(
+                live_position["side"], live_position["entry_price"],
+                current_price, live_position["size_usd"],
+            )
+
         base_prompt = _PROMPT_IN_POSITION.format(
             context=context,
-            side=open_trade.side.upper(),
-            entry_price=open_trade.entry_price,
+            side=live_position["side"].upper(),
+            entry_price=live_position["entry_price"],
             elapsed=elapsed_str,
             pnl_sign="+" if pnl >= 0 else "",
             pnl_usd=abs(pnl),
@@ -124,7 +137,7 @@ def run_cycle(charts: list[tuple[str, str, str]], open_trade: Trade | None = Non
             chart_list=chart_list_str,
         )
         logger.info(
-            f"[MAGI] Starting cycle (IN POSITION: {open_trade.side.upper()}) "
+            f"[MAGI] Starting cycle (IN POSITION: {live_position['side'].upper()}) "
             f"with {len(charts)} timeframe charts"
         )
     else:

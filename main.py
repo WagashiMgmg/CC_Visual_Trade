@@ -42,11 +42,14 @@ def trading_cycle():
     """
     from src.chart import generate_multi_tf_charts
     from src.orchestrator import run_cycle
-    from src.trader import get_open_trade
+    from src.trader import get_live_position
 
-    open_trade = get_open_trade()
-    if open_trade:
-        logger.info(f"Open position found (trade_id={open_trade.id}), will ask Claude for EXIT/HOLD")
+    live_pos = get_live_position()
+    if live_pos:
+        logger.info(
+            f"Open position found (trade_id={live_pos['trade_id']}, "
+            f"side={live_pos['side']}, HL source), will ask Claude for EXIT/HOLD"
+        )
 
     from src import state
 
@@ -62,7 +65,7 @@ def trading_cycle():
 
     state.cycle_running = True
     try:
-        result = run_cycle(charts, open_trade=open_trade)
+        result = run_cycle(charts, live_position=live_pos)
         logger.info(f"Cycle complete: {result['decision']} — {result['reason'][:60]}")
     except Exception as e:
         logger.error(f"Orchestrator failed: {e}")

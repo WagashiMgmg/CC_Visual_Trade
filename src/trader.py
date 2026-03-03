@@ -22,13 +22,72 @@ def calc_pnl(side: str, entry_price: float, exit_price: float, size_usd: float) 
 
 
 def get_open_trade():
-    """Return the currently open Trade, or None."""
+    """Return the currently open Trade from DB, or None."""
     with get_session() as session:
         trade = session.query(Trade).filter(Trade.status == "open").first()
         if trade:
             # Detach from session by accessing needed fields
             session.expunge(trade)
         return trade
+
+
+def get_live_position() -> dict | None:
+    """
+    Return the current position using Hyperliquid as the source of truth,
+    enriched with DB metadata (trade_id, entry_time).
+    Returns None if no position exists on HL.
+    Falls back to DB-only in dry_run mode.
+
+    Keys: coin, side, qty, entry_price, size_usd, unrealized_pnl,
+          trade_id, entry_time  (last two from DB, may be None)
+    """
+    if settings.dry_run:
+        # dry_run: no real HL position, use DB
+        trade = get_open_trade()
+        if trade is None:
+            return None
+        return {
+            "coin": trade.coin,
+            "side": trade.side,
+            "qty": trade.qty,
+            "entry_price": trade.entry_price,
+            "size_usd": trade.size_usd,
+            "unrealized_pnl": None,
+            "trade_id": trade.id,
+            "entry_time": trade.entry_time,
+        }
+
+    from hyperliquid.info import Info
+
+    coin = settings.trading_coin
+    info = Info(settings.api_url, skip_ws=True)
+    hl_pos = _get_hl_position(info, coin)
+
+    if hl_pos is None:
+        return None
+
+    szi = float(hl_pos["szi"])
+    side = "long" if szi > 0 else "short"
+    qty = abs(szi)
+    entry_price = float(hl_pos.get("entryPx", 0))
+    unrealized_pnl = float(hl_pos.get("unrealizedPnl", 0))
+
+    # Enrich with DB metadata
+    trade = get_open_trade()
+    trade_id = trade.id if trade else None
+    entry_time = trade.entry_time if trade else None
+    size_usd = trade.size_usd if trade else (entry_price * qty)
+
+    return {
+        "coin": coin,
+        "side": side,
+        "qty": qty,
+        "entry_price": entry_price,
+        "size_usd": size_usd,
+        "unrealized_pnl": unrealized_pnl,
+        "trade_id": trade_id,
+        "entry_time": entry_time,
+    }
 
 
 def close_expired_positions():

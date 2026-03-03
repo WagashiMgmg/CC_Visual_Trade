@@ -32,6 +32,14 @@
         <span class="label">Elapsed</span>
         <span class="value mono" id="elapsed">{{ open_trade.elapsed }}</span>
       </div>
+      {% if open_trade.unrealized_pnl is not none %}
+      <div class="position-detail">
+        <span class="label">Unrealized P&L</span>
+        <span class="value mono {% if open_trade.unrealized_pnl >= 0 %}text-green{% else %}text-red{% endif %}">
+          {% if open_trade.unrealized_pnl >= 0 %}+{% endif %}${{ "{:,.2f}".format(open_trade.unrealized_pnl) }}
+        </span>
+      </div>
+      {% endif %}
       <div class="position-detail">
         <span class="label">Close in</span>
         <span class="value mono text-warn" id="close-in">{{ open_trade.close_in }}</span>
