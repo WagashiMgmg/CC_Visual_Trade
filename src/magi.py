@@ -104,6 +104,9 @@ class ClaudeAgent(MagiAgent):
                 logger.error(f"[Melchior] non-zero exit ({result.returncode}) — marking OFFLINE")
                 self.available = False
                 return None
+            if not _DECISION_RE.search(result.stdout):
+                logger.warning("[Melchior] no explicit DECISION in output — abstaining")
+                return None
             return _parse_vote(result.stdout)
         except subprocess.TimeoutExpired:
             logger.error("[Melchior] timed out — marking OFFLINE")
@@ -150,12 +153,18 @@ class GeminiAgent(MagiAgent):
         for model in self._MODEL_FALLBACK:
             output, quota_exceeded = self._run_gemini(full_prompt, model)
             if output is not None:
+                if not _DECISION_RE.search(output):
+                    logger.warning(f"[Balthazar] no explicit DECISION in output ({model}) — abstaining")
+                    return None
                 return _parse_vote(output)
             if not quota_exceeded:
                 # Non-quota error (@ syntax, etc.) — retry text-only once
                 logger.warning("[Balthazar] @ syntax failed, retrying text-only")
                 output, quota_exceeded = self._run_gemini(prompt, model)
                 if output is not None:
+                    if not _DECISION_RE.search(output):
+                        logger.warning("[Balthazar] no explicit DECISION in text-only retry — abstaining")
+                        return None
                     return _parse_vote(output)
                 if not quota_exceeded:
                     break  # Non-quota failure, skip remaining models
