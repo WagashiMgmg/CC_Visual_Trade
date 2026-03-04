@@ -204,6 +204,20 @@ def run_cycle(
         session.commit()
         cycle_id = cycle.id
 
+    # Chart refresh callback for re-deliberation rounds
+    from src.chart import generate_multi_tf_charts
+
+    def _refresh_charts() -> list[str]:
+        pos = live_position
+        new_charts = generate_multi_tf_charts(
+            coin,
+            entry_price=pos["entry_price"] if pos else None,
+            entry_time=pos["entry_time"] if pos else None,
+            side=pos["side"] if pos else None,
+        )
+        logger.info(f"[MAGI] Chart refresh: {len(new_charts)} charts regenerated")
+        return [path for _, _, path in new_charts]
+
     # Run MAGI voting
     magi = MagiSystem()
     magi_result = magi.run(
@@ -211,6 +225,7 @@ def run_cycle(
         charts=chart_paths,
         cycle_id=cycle_id,
         in_position=in_position,
+        chart_fn=_refresh_charts,
     )
 
     decision  = magi_result["decision"]

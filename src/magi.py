@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import tempfile
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
@@ -424,6 +425,7 @@ class MagiSystem:
         charts: list[str],
         cycle_id: int,
         in_position: bool = False,
+        chart_fn: Callable[[], list[str]] | None = None,
     ) -> dict:
         """
         Run MAGI voting. Returns:
@@ -465,6 +467,9 @@ class MagiSystem:
 
         # ── Round 1: shared context ───────────────────────────────────────────
         final_round = 1
+        if chart_fn:
+            charts = chart_fn()
+            logger.info("[MAGI] Round 1: charts refreshed")
         prompts1 = self._build_round1_prompts(base_prompt, charts, votes, in_position)
         votes1 = self._run_agents_parallel(
             prompts1, charts, {a.name: "Read" for a in self._active_agents()}
@@ -480,6 +485,9 @@ class MagiSystem:
 
         # ── Round 2: internet research ────────────────────────────────────────
         final_round = 2
+        if chart_fn:
+            charts = chart_fn()
+            logger.info("[MAGI] Round 2: charts refreshed")
         prompts2, tools2 = self._build_round2_prompts(base_prompt, charts, votes1, in_position)
         votes2 = self._run_agents_parallel(prompts2, charts, tools2)
         self._save_round_votes(cycle_id, 2, votes2)
@@ -493,6 +501,9 @@ class MagiSystem:
 
         # ── Round 3: compare vs Melchior ─────────────────────────────────────
         final_round = 3
+        if chart_fn:
+            charts = chart_fn()
+            logger.info("[MAGI] Round 3: charts refreshed")
         melchior_vote = votes2.get("melchior", votes1.get("melchior", votes.get("melchior", {})))
         prompts3 = self._build_round3_prompts(base_prompt, charts, votes2, melchior_vote, in_position)
         votes3 = self._run_agents_parallel(
