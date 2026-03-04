@@ -227,57 +227,28 @@ def _get_next_cycle_at() -> str | None:
     return None
 
 
+_rules_cache: dict = {"mtime": 0.0, "result": None}
+
+
 def _get_rules():
-    """Parse AGENTS.md into structured sections."""
-    import os
-    import re as _re
+    """Read AGENTS.md as raw HTML (cached by mtime)."""
     path = "/app/AGENTS.md"
     try:
-        with open(path) as f:
-            content = f.read()
         mtime = os.path.getmtime(path)
-        updated = datetime.utcfromtimestamp(mtime).strftime("%Y-%m-%d %H:%M UTC")
-    except FileNotFoundError:
+    except OSError:
         return None
-
-    sections = {"basic": [], "learned": [], "positive": []}
-    key_map = {
-        "基本ルール": "basic",
-        "学習済みルール": "learned",
-        "エントリー推奨条件": "positive",
-    }
-    current = None
-
-    for line in content.splitlines():
-        if line.startswith("## "):
-            current = None
-            for k, v in key_map.items():
-                if k in line:
-                    current = v
-                    break
-            continue
-        if current is None or not line.startswith("- "):
-            continue
-        text = line[2:].strip()
-        if not text or text.startswith("（"):
-            continue
-        # **Name**: description
-        m = _re.match(r"\*\*(.+?)\*\*[：:]\s*(.*)", text, _re.DOTALL)
-        if m:
-            sections[current].append({"name": m.group(1), "desc": m.group(2).strip()})
-        else:
-            # Basic rule: key: value ← note
-            m2 = _re.match(r"([^:：←]+)[：:]\s*(.+?)(?:\s+←\s*(.+))?$", text)
-            if m2:
-                sections[current].append({
-                    "name": m2.group(1).strip(),
-                    "desc": m2.group(2).strip(),
-                    "note": (m2.group(3) or "").strip(),
-                })
-            else:
-                sections[current].append({"name": "", "desc": text})
-
-    return {**sections, "updated": updated}
+    if mtime == _rules_cache["mtime"]:
+        return _rules_cache["result"]
+    try:
+        with open(path) as f:
+            html = f.read()
+    except OSError:
+        return None
+    updated = datetime.utcfromtimestamp(mtime).strftime("%Y-%m-%d %H:%M UTC")
+    result = {"html": html, "updated": updated}
+    _rules_cache["mtime"] = mtime
+    _rules_cache["result"] = result
+    return result
 
 
 def _get_all_cycles(limit=200):

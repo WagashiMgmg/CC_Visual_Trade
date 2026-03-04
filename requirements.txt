@@ -26,9 +26,6 @@ requests>=2.31.0
 python-dotenv>=1.0.1
 pydantic-settings>=2.2.1
 
-# Markdown rendering
-markdown>=3.5
-
 # Discord bot
 discord.py>=2.3.0
 

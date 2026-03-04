@@ -775,7 +775,60 @@ body {
 
 /* ── Rules page ───────────────────────────────────────────────── */
 
-/* Page header */
+/* AGENTS.md card */
+.agents-md-card { padding: 0; }
+.agents-md-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 700;
+}
+.agents-md {
+  padding: 20px 24px;
+  line-height: 1.75;
+  font-size: 13px;
+  color: var(--text);
+}
+.agents-md h1 { font-size: 18px; font-weight: 800; margin: 0 0 12px; }
+.agents-md h2 {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  margin: 24px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.agents-md h2:first-of-type { margin-top: 8px; }
+.agents-md p  { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.agents-md ul, .agents-md ol { margin: 0; padding-left: 20px; }
+.agents-md li {
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+.agents-md li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.agents-md code {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: var(--blue);
+}
+@media (max-width: 600px) {
+  .agents-md { padding: 14px 16px; }
+  .agents-md h1 { font-size: 15px; }
+}
+
+/* (legacy) Page header */
 .rules-header {
   display: flex;
   align-items: center;
