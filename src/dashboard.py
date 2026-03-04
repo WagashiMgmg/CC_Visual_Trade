@@ -9,7 +9,6 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-import markdown as md
 from src.config import settings
 from src.database import Cycle, MagiVote, Trade, get_session
 
