@@ -136,7 +136,7 @@ def _get_latest_cycle():
         return {
             "timestamp": c.timestamp.strftime("%Y-%m-%d %H:%M UTC"),
             "decision": c.ai_decision,
-            "reason": md.markdown(raw_reason) if raw_reason else "—",
+            "reason": raw_reason or "—",
             "action": c.action_taken,
             "chart_path": c.chart_path,
         }
@@ -305,7 +305,7 @@ def _get_all_cycles(limit=200):
                 "timestamp": c.timestamp.strftime("%Y-%m-%d %H:%M UTC") if c.timestamp else "",
                 "coin": c.coin,
                 "decision": c.ai_decision,
-                "reasoning": md.markdown(c.ai_reasoning) if c.ai_reasoning else "",
+                "reasoning": c.ai_reasoning or "",
                 "action": c.action_taken,
                 "skip_reason": c.skip_reason or "",
                 "rounds": rounds,
