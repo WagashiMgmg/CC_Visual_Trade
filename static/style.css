@@ -813,7 +813,7 @@ body {
   font-weight: 800;
   border-bottom: 1px solid var(--border);
   padding-bottom: 6px;
-  margin-top: 1.5em;
+  margin: 1.5em 0 0.4em;
 }
 .rules-md-body h2:first-child {
   margin-top: 0;

@@ -227,19 +227,32 @@ def _get_next_cycle_at() -> str | None:
     return None
 
 
+_rules_cache: dict = {"mtime": 0.0, "result": None}
+
+
 def _get_rules():
-    """Read AGENTS.md and convert to HTML."""
+    """Read AGENTS.md and convert to HTML (cached by mtime)."""
     path = "/app/AGENTS.md"
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return None
+
+    if mtime == _rules_cache["mtime"]:
+        return _rules_cache["result"]
+
     try:
         with open(path) as f:
             content = f.read()
-        mtime = os.path.getmtime(path)
-        updated = datetime.utcfromtimestamp(mtime).strftime("%Y-%m-%d %H:%M UTC")
-    except FileNotFoundError:
+    except OSError:
         return None
 
-    html = md.markdown(content, extensions=["extra", "sane_lists"])
-    return {"html": html, "updated": updated}
+    updated = datetime.utcfromtimestamp(mtime).strftime("%Y-%m-%d %H:%M UTC")
+    html = md.markdown(content, extensions=["tables", "fenced_code", "sane_lists"])
+    result = {"html": html, "updated": updated}
+    _rules_cache["mtime"] = mtime
+    _rules_cache["result"] = result
+    return result
 
 
 def _get_all_cycles(limit=200):
