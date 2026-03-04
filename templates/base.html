@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CC Visual Trade</title>
-  <link rel="stylesheet" href="/static/style.css?v=14">
+  <link rel="stylesheet" href="/static/style.css?v=18">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -14,16 +14,20 @@
         <span class="logo-icon">⚡</span>
         <span class="logo-text">CC Visual Trade</span>
       </div>
-      <nav class="nav">
+      <nav class="nav" id="nav">
         <a href="/" class="nav-link {% if page == 'index' %}active{% endif %}">Dashboard</a>
         <a href="/trades" class="nav-link {% if page == 'trades' %}active{% endif %}">Trades</a>
         <a href="/cycles" class="nav-link {% if page == 'cycles' %}active{% endif %}">Cycles</a>
         <a href="/rules" class="nav-link {% if page == 'rules' %}active{% endif %}">Rules</a>
+        <a href="/reflections" class="nav-link {% if page == 'reflections' %}active{% endif %}">Reflections</a>
       </nav>
       <div class="next-cycle-wrap">
         <span class="next-cycle-label">Next cycle</span>
         <span class="next-cycle-timer mono" id="next-cycle-timer">—</span>
       </div>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
       <div id="live-dot" class="live-dot" title="Live"></div>
     </div>
   </header>
@@ -62,6 +66,14 @@
     fetchNextCycle();
     setInterval(fetchNextCycle, 10000);
     setInterval(updateCountdown, 1000);
+  </script>
+  <script>
+    const navToggle = document.getElementById('nav-toggle');
+    const navEl = document.getElementById('nav');
+    navToggle.addEventListener('click', () => navEl.classList.toggle('open'));
+    navEl.querySelectorAll('.nav-link').forEach(a =>
+      a.addEventListener('click', () => navEl.classList.remove('open'))
+    );
   </script>
   {% block scripts %}{% endblock %}
 </body>

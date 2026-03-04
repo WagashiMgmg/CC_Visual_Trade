@@ -229,6 +229,25 @@ def _get_next_cycle_at() -> str | None:
 _rules_cache: dict = {"mtime": 0.0, "result": None}
 
 
+def _get_reflections():
+    import markdown as md
+    dir_path = Path("/app/data/reflections")
+    if not dir_path.exists():
+        return []
+    files = sorted(dir_path.glob("trade_*.md"), key=lambda f: f.name, reverse=True)
+    result = []
+    for f in files:
+        try:
+            text = f.read_text()
+            lines = text.strip().splitlines()
+            title = lines[0].lstrip("# ").strip() if lines else f.stem
+            html_content = md.markdown(text, extensions=["fenced_code", "tables"])
+            result.append({"title": title, "html": html_content, "filename": f.name})
+        except Exception:
+            pass
+    return result
+
+
 def _get_rules():
     """Read AGENTS.md as raw HTML (cached by mtime)."""
     path = "/app/AGENTS.md"
@@ -384,6 +403,14 @@ async def rules_page(request: Request):
     return templates.TemplateResponse(
         "rules.html",
         {"request": request, "rules": _get_rules()},
+    )
+
+
+@router.get("/reflections", response_class=HTMLResponse)
+async def reflections_page(request: Request):
+    return templates.TemplateResponse(
+        "reflections.html",
+        {"request": request, "reflections": _get_reflections()},
     )
 
 

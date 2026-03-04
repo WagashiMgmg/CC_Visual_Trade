@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% set page = "reflections" %}
+{% block content %}
+
+<div class="page-header">
+  <h2>Reflections</h2>
+  <span class="muted mono">{{ reflections|length }} trades</span>
+</div>
+
+{% if not reflections %}
+<div class="card">
+  <p class="muted" style="padding:16px">No reflections yet.</p>
+</div>
+{% else %}
+{% for r in reflections %}
+<details class="reflection-card">
+  <summary class="reflection-summary">{{ r.title }}</summary>
+  <div class="reflection-body">{{ r.html | safe }}</div>
+</details>
+{% endfor %}
+{% endif %}
+
+{% endblock %}
