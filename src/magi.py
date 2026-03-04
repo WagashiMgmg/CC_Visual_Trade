@@ -125,7 +125,7 @@ class GeminiAgent(MagiAgent):
     display = "Balthazar"
 
     # Model fallback order: default (flash) → flash-lite → pro
-    _MODEL_FALLBACK = [None, "gemini-2.5-flash-lite", "gemini-2.5-pro"]
+    _MODEL_FALLBACK = ["gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
 
     def _check_available_quota(self) -> bool:
         """Return True if at least one model has quota remaining."""

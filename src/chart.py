@@ -20,14 +20,14 @@ def _api_url() -> str:
 
 # Timeframes to generate: (interval, candle_count, label)
 TIMEFRAMES = [
-    ("1m",   100, "1min  (~1.7h)"),
-    ("5m",   100, "5min  (~8h)"),
-    ("15m",  100, "15min (~25h)"),
-    ("30m",   96, "30min (~2d)"),
-    ("1h",    72, "1h    (~3d)"),
-    ("1d",    60, "1d    (~2mo)"),
-    ("1w",    52, "1w    (~1yr)"),
-    ("1M",    24, "1M    (~2yr)"),
+    ("1m",   120, "1min  (~2h)"),
+    ("5m",   120, "5min  (~10h)"),
+    ("15m",  120, "15min (~30h)"),
+    ("30m",  120, "30min (~2.5d)"),
+    ("1h",    96, "1h    (~4d)"),
+    ("1d",    90, "1d    (~3mo)"),
+    ("1w",    60, "1w    (~1.2yr)"),
+    ("1M",    36, "1M    (~3yr)"),
 ]
 
 # Interval string → milliseconds per candle
@@ -79,17 +79,43 @@ def fetch_candles(coin: str, interval: str, count: int) -> pd.DataFrame:
     return df.tail(count)
 
 
+def _sma_cross_markers(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """Return golden cross (SMA20 crosses above SMA50) and dead cross markers at Close price."""
+    if df["SMA50"].isna().all():
+        nan = pd.Series(float("nan"), index=df.index)
+        return nan, nan
+    prev20 = df["SMA20"].shift(1)
+    prev50 = df["SMA50"].shift(1)
+    golden = (prev20 < prev50) & (df["SMA20"] >= df["SMA50"])
+    dead   = (prev20 > prev50) & (df["SMA20"] <= df["SMA50"])
+    gc_markers = df["Close"].where(golden)
+    dc_markers = df["Close"].where(dead)
+    return gc_markers, dc_markers
+
+
 def _plot_chart(df: pd.DataFrame, coin: str, title: str, out_path: str) -> None:
     """Render and save a single candlestick chart."""
     df["SMA20"] = df["Close"].rolling(20).mean()
     df["SMA50"] = df["Close"].rolling(50).mean()
     df["RSI"]   = _rsi(df["Close"], 14)
 
+    gc_markers, dc_markers = _sma_cross_markers(df)
+
     add_plots = [
         mpf.make_addplot(df["SMA20"], color="#ff9900", width=1.5, label="SMA20"),
     ]
     if df["SMA50"].notna().any():
         add_plots.append(mpf.make_addplot(df["SMA50"], color="#58a6ff", width=1.5, label="SMA50"))
+        if gc_markers.notna().any():
+            add_plots.append(mpf.make_addplot(
+                gc_markers, type="scatter", markersize=120, marker="x",
+                color="#3fb950",  # green = golden cross
+            ))
+        if dc_markers.notna().any():
+            add_plots.append(mpf.make_addplot(
+                dc_markers, type="scatter", markersize=120, marker="x",
+                color="#f85149",  # red = dead cross
+            ))
     add_plots += [
         mpf.make_addplot(df["RSI"], panel=2, color="#bc8cff", width=1.2,
                          ylabel="RSI", ylim=(0, 100)),
@@ -101,7 +127,7 @@ def _plot_chart(df: pd.DataFrame, coin: str, title: str, out_path: str) -> None:
         base_mpf_style="nightclouds",
         facecolor="#0d1117", edgecolor="#30363d",
         gridcolor="#21262d", gridstyle="--", gridaxis="both",
-        rc={"font.size": 9},
+        rc={"font.size": 11},
     )
 
     fig, _ = mpf.plot(
