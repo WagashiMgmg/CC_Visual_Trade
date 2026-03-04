@@ -79,6 +79,23 @@ def fetch_candles(coin: str, interval: str, count: int) -> pd.DataFrame:
     return df.tail(count)
 
 
+def _entry_marker(
+    df: pd.DataFrame, entry_time: datetime, entry_price: float, side: str
+) -> tuple[pd.Series | None, pd.Series | None]:
+    """Return (scatter_series, hline_series) for the entry point, or (None, None) if out of range."""
+    et = entry_time if entry_time.tzinfo else entry_time.replace(tzinfo=timezone.utc)
+    if et < df.index[0]:
+        return None, None
+    if et > df.index[-1]:
+        idx = len(df) - 1  # entry is in the latest (still-forming) candle
+    else:
+        idx = df.index.get_indexer([et], method="nearest")[0]
+    marker = pd.Series(float("nan"), index=df.index)
+    marker.iloc[idx] = entry_price
+    hline = pd.Series(entry_price, index=df.index)
+    return marker, hline
+
+
 def _sma_cross_markers(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     """Return golden cross (SMA20 crosses above SMA50) and dead cross markers at Close price."""
     if df["SMA50"].isna().all():
@@ -93,7 +110,10 @@ def _sma_cross_markers(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     return gc_markers, dc_markers
 
 
-def _plot_chart(df: pd.DataFrame, coin: str, title: str, out_path: str) -> None:
+def _plot_chart(
+    df: pd.DataFrame, coin: str, title: str, out_path: str,
+    entry_price: float | None = None, entry_time: datetime | None = None, side: str | None = None,
+) -> None:
     """Render and save a single candlestick chart."""
     df["SMA20"] = df["Close"].rolling(20).mean()
     df["SMA50"] = df["Close"].rolling(50).mean()
@@ -108,14 +128,29 @@ def _plot_chart(df: pd.DataFrame, coin: str, title: str, out_path: str) -> None:
         add_plots.append(mpf.make_addplot(df["SMA50"], color="#58a6ff", width=1.5, label="SMA50"))
         if gc_markers.notna().any():
             add_plots.append(mpf.make_addplot(
-                gc_markers, type="scatter", markersize=120, marker="x",
+                gc_markers, type="scatter", markersize=200, marker="x",
                 color="#3fb950",  # green = golden cross
             ))
         if dc_markers.notna().any():
             add_plots.append(mpf.make_addplot(
-                dc_markers, type="scatter", markersize=120, marker="x",
+                dc_markers, type="scatter", markersize=200, marker="x",
                 color="#f85149",  # red = dead cross
             ))
+    # Entry point marker
+    entry_in_range = False
+    if entry_price is not None and entry_time is not None and side is not None:
+        e_marker, e_hline = _entry_marker(df, entry_time, entry_price, side)
+        if e_marker is not None:
+            entry_in_range = True
+            e_color = "#3fb950" if side == "long" else "#f85149"
+            e_symbol = "^" if side == "long" else "v"
+            add_plots.append(mpf.make_addplot(
+                e_hline, color=e_color, linestyle="--", width=1.0,
+            ))
+            add_plots.append(mpf.make_addplot(
+                e_marker, type="scatter", markersize=200, marker=e_symbol, color=e_color,
+            ))
+
     add_plots += [
         mpf.make_addplot(df["RSI"], panel=2, color="#bc8cff", width=1.2,
                          ylabel="RSI", ylim=(0, 100)),
@@ -130,13 +165,36 @@ def _plot_chart(df: pd.DataFrame, coin: str, title: str, out_path: str) -> None:
         rc={"font.size": 11},
     )
 
-    fig, _ = mpf.plot(
+    fig, axes = mpf.plot(
         df, type="candle", style=style,
         title=f"\n{title}",
         volume=True, addplot=add_plots,
         panel_ratios=(3, 1, 1), figsize=(16, 10),
         returnfig=True, tight_layout=True,
     )
+
+    # Legend
+    ax = axes[0]
+    legend_handles = [
+        plt.Line2D([0], [0], color="#ff9900", linewidth=2, label="SMA20"),
+        plt.Line2D([0], [0], color="#58a6ff", linewidth=2, label="SMA50"),
+        plt.Line2D([0], [0], marker="x", color="#3fb950", markersize=10,
+                   markeredgewidth=2.5, linestyle="none", label="Golden Cross"),
+        plt.Line2D([0], [0], marker="x", color="#f85149", markersize=10,
+                   markeredgewidth=2.5, linestyle="none", label="Dead Cross"),
+    ]
+    if entry_in_range:
+        side_label = "Long" if side == "long" else "Short"
+        e_label = f"Entry ({side_label}) ${entry_price:,.0f}"
+        e_color = "#3fb950" if side == "long" else "#f85149"
+        e_symbol = "^" if side == "long" else "v"
+        legend_handles.append(
+            plt.Line2D([0], [0], marker=e_symbol, color=e_color, markersize=10,
+                       linestyle="none", label=e_label)
+        )
+    ax.legend(handles=legend_handles, loc="upper left",
+              facecolor="#161b22", edgecolor="#30363d", labelcolor="white", fontsize=10)
+
     fig.savefig(out_path, dpi=120, bbox_inches="tight", facecolor="#0d1117")
     plt.close(fig)
 
@@ -152,7 +210,12 @@ def _cleanup_old_charts(coin: str) -> None:
                 pass
 
 
-def generate_multi_tf_charts(coin: str) -> list[tuple[str, str, str]]:
+def generate_multi_tf_charts(
+    coin: str,
+    entry_price: float | None = None,
+    entry_time: datetime | None = None,
+    side: str | None = None,
+) -> list[tuple[str, str, str]]:
     """
     Generate charts for all timeframes.
     Returns list of (interval, label, file_path).
@@ -170,7 +233,8 @@ def generate_multi_tf_charts(coin: str) -> list[tuple[str, str, str]]:
                 continue
             out_path = f"/app/charts/{coin}_{interval}_{ts}.png"
             title = f"{coin}/USD  {label}  |  SMA20 (orange) SMA50 (blue) RSI (purple)"
-            _plot_chart(df, coin, title, out_path)
+            _plot_chart(df, coin, title, out_path,
+                        entry_price=entry_price, entry_time=entry_time, side=side)
             logger.info(f"Chart saved: {out_path}")
             results.append((interval, label, out_path))
         except Exception as e:

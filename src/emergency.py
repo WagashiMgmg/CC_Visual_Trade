@@ -105,7 +105,12 @@ def _run_emergency_cycle(reason: str, details: str):
         state.last_emergency_at = datetime.utcnow()
 
         live_pos = get_live_position()
-        charts = generate_multi_tf_charts(settings.trading_coin)
+        charts = generate_multi_tf_charts(
+            settings.trading_coin,
+            entry_price=live_pos["entry_price"] if live_pos else None,
+            entry_time=live_pos["entry_time"] if live_pos else None,
+            side=live_pos["side"] if live_pos else None,
+        )
         if not charts:
             logger.error("[EMERGENCY] No charts generated, aborting emergency cycle")
             return

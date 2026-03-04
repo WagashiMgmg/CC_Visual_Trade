@@ -72,10 +72,23 @@ def get_live_position() -> dict | None:
     entry_price = float(hl_pos.get("entryPx", 0))
     unrealized_pnl = float(hl_pos.get("unrealizedPnl", 0))
 
+    # entry_time: HL fills から最新のオープンfillを取得
+    entry_time = None
+    try:
+        open_dir = "Open Long" if side == "long" else "Open Short"
+        fills = info.user_fills(settings.hyperliquid_main_address)
+        for f in fills:
+            if f.get("coin") == coin and f.get("dir") == open_dir:
+                entry_time = datetime.utcfromtimestamp(f["time"] / 1000)
+                break
+    except Exception as e:
+        logger.warning(f"Failed to fetch entry_time from fills: {e}")
+
     # Enrich with DB metadata
     trade = get_open_trade()
     trade_id = trade.id if trade else None
-    entry_time = trade.entry_time if trade else None
+    if entry_time is None:
+        entry_time = trade.entry_time if trade else None
     size_usd = trade.size_usd if trade else (entry_price * qty)
 
     return {
