@@ -170,7 +170,7 @@
       </div>
 
       <!-- Mobile-only status overlay (top-right empty area) -->
-      <div class="magi-lbl magi-lbl-mobile-status" id="magi-mobile-status">
+      <div class="magi-lbl magi-lbl-mobile-status{% if cycle_running %} cycle-active{% endif %}" id="magi-mobile-status">
         <div class="magi-status-badge magi-running-badge">審議中</div>
         {% if magi.rounds > 1 %}
           <div class="magi-status-badge magi-deliberating magi-result-badge">再審議で決定</div>

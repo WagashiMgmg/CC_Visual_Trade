@@ -234,7 +234,7 @@ def _get_reflections():
     dir_path = Path("/app/data/reflections")
     if not dir_path.exists():
         return []
-    files = sorted(dir_path.glob("trade_*.md"), key=lambda f: f.name, reverse=True)
+    files = sorted(dir_path.glob("trade_*.md"), key=lambda f: int(f.stem.split("_")[1]), reverse=True)
     result = []
     for f in files:
         try:

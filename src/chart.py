@@ -105,8 +105,8 @@ def _sma_cross_markers(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     prev50 = df["SMA50"].shift(1)
     golden = (prev20 < prev50) & (df["SMA20"] >= df["SMA50"])
     dead   = (prev20 > prev50) & (df["SMA20"] <= df["SMA50"])
-    gc_markers = df["Close"].where(golden)
-    dc_markers = df["Close"].where(dead)
+    gc_markers = df["SMA20"].where(golden)
+    dc_markers = df["SMA20"].where(dead)
     return gc_markers, dc_markers
 
 
@@ -126,16 +126,7 @@ def _plot_chart(
     ]
     if df["SMA50"].notna().any():
         add_plots.append(mpf.make_addplot(df["SMA50"], color="#58a6ff", width=1.5, label="SMA50"))
-        if gc_markers.notna().any():
-            add_plots.append(mpf.make_addplot(
-                gc_markers, type="scatter", markersize=200, marker="x",
-                color="#3fb950",  # green = golden cross
-            ))
-        if dc_markers.notna().any():
-            add_plots.append(mpf.make_addplot(
-                dc_markers, type="scatter", markersize=200, marker="x",
-                color="#f85149",  # red = dead cross
-            ))
+        # GC/DC markers drawn via annotate after plot (emoji support)
     # Entry point marker
     entry_in_range = False
     if entry_price is not None and entry_time is not None and side is not None:
@@ -173,15 +164,53 @@ def _plot_chart(
         returnfig=True, tight_layout=True,
     )
 
-    # Legend
     ax = axes[0]
+
+    # Embed emoji behind candlesticks using AnnotationBbox (zorder < candle zorder ~3)
+    if df["SMA50"].notna().any():
+        try:
+            import numpy as np
+            from PIL import Image as PILImage, ImageDraw, ImageFont
+            from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+
+            def _make_emoji_img(char: str, size: int = 48) -> "np.ndarray":
+                efont = ImageFont.truetype(
+                    "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 109)
+                canvas = PILImage.new("RGBA", (109, 109), (0, 0, 0, 0))
+                ImageDraw.Draw(canvas).text((0, 0), char, font=efont, embedded_color=True)
+                return np.array(canvas.resize((size, size), PILImage.LANCZOS))
+
+            gc_img = _make_emoji_img("🚀")
+            dc_img = _make_emoji_img("🔨")
+            for idx, val in gc_markers.items():
+                if not pd.isna(val):
+                    xi = df.index.get_loc(idx)
+                    ab = AnnotationBbox(
+                        OffsetImage(gc_img, zoom=1.0),
+                        (xi, val), frameon=False, zorder=1.5,
+                        box_alignment=(0.5, 1.0),  # top of box at SMA → rocket below
+                    )
+                    ax.add_artist(ab)
+            for idx, val in dc_markers.items():
+                if not pd.isna(val):
+                    xi = df.index.get_loc(idx)
+                    ab = AnnotationBbox(
+                        OffsetImage(dc_img, zoom=1.0),
+                        (xi, val), frameon=False, zorder=1.5,
+                        box_alignment=(0.5, 0.0),  # bottom of box at SMA → hammer above
+                    )
+                    ax.add_artist(ab)
+        except Exception as e:
+            logger.warning(f"Emoji annotation failed: {e}")
+
+    # Legend
     legend_handles = [
         plt.Line2D([0], [0], color="#ff9900", linewidth=2, label="SMA20"),
         plt.Line2D([0], [0], color="#58a6ff", linewidth=2, label="SMA50"),
-        plt.Line2D([0], [0], marker="x", color="#3fb950", markersize=10,
-                   markeredgewidth=2.5, linestyle="none", label="Golden Cross"),
-        plt.Line2D([0], [0], marker="x", color="#f85149", markersize=10,
-                   markeredgewidth=2.5, linestyle="none", label="Dead Cross"),
+        plt.Line2D([0], [0], marker="^", color="#3fb950", markersize=10,
+                   linestyle="none", label="GC (Golden Cross)"),
+        plt.Line2D([0], [0], marker="v", color="#f85149", markersize=10,
+                   linestyle="none", label="DC (Dead Cross)"),
     ]
     if entry_in_range:
         side_label = "Long" if side == "long" else "Short"
@@ -197,6 +226,7 @@ def _plot_chart(
 
     fig.savefig(out_path, dpi=120, bbox_inches="tight", facecolor="#0d1117")
     plt.close(fig)
+
 
 
 def _cleanup_old_charts(coin: str) -> None:
