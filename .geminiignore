@@ -1,0 +1,42 @@
+# Gemini CLI: ignore codebase, allow data/charts that agents need to read
+
+# Ignore all source code
+src/
+script/
+tests/
+prompt/
+templates/
+static/
+docs/
+main.py
+*.py
+
+# Ignore build/config
+Dockerfile
+docker-compose*.yml
+requirements.txt
+start_tunnel.sh
+.env
+
+# Ignore generated artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+node_modules/
+.venv/
+venv/
+dist/
+build/
+
+# Ignore OS files
+.DS_Store
+*.swp
+
+# Allow data that Gemini needs (override .gitignore)
+!AGENTS.md
+!CLAUDE.md
+!data/
+!data/reflections/
+!data/reflections/**
+!charts/
+!charts/**
