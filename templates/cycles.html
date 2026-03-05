@@ -77,7 +77,7 @@
     {% if c.reasoning %}
     <div class="cycle-section">
       <div class="cycle-section-title">Consensus Reasoning</div>
-      <div class="cycle-reasoning prose">{{ c.reasoning | safe }}</div>
+      <div class="cycle-reasoning prose">{{ c.reasoning | e | replace('\n', '<br>') | safe }}</div>
     </div>
     {% endif %}
 
@@ -108,7 +108,7 @@
       {% if t.reflection %}
       <details class="reflection-details">
         <summary class="reflection-summary">Post-trade Reflection</summary>
-        <div class="reflection-body prose">{{ t.reflection | replace('\n', '<br>') | safe }}</div>
+        <div class="reflection-body prose">{{ t.reflection | e | replace('\n', '<br>') | safe }}</div>
       </details>
       {% endif %}
     </div>
