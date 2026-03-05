@@ -8,10 +8,10 @@ Python executes the trade scripts after consensus is reached.
 import logging
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.config import settings
-from src.database import Cycle, Trade, get_session
+from src.database import Cycle, HoldOpportunity, Trade, get_session
 from src.magi import MagiSystem
 from src.notify import send_discord
 from src.trader import calc_pnl
@@ -293,6 +293,13 @@ def run_cycle(
         subprocess.run(["python", "/app/script/close.py"])
     # HOLD: do nothing
 
+    # Fetch mid price for cycle record
+    try:
+        mid_price = _fetch_mid(coin)
+    except Exception as e:
+        logger.warning(f"Failed to fetch mid price for cycle record: {e}")
+        mid_price = None
+
     # Update Cycle record
     with get_session() as session:
         cycle = session.query(Cycle).filter(Cycle.id == cycle_id).first()
@@ -300,6 +307,7 @@ def run_cycle(
             cycle.ai_decision  = decision
             cycle.ai_reasoning = reasoning
             cycle.action_taken = decision.lower()
+            cycle.mid_price    = mid_price
             # Store summary of all votes as raw output
             votes_summary = "\n\n".join(
                 f"=== {name.upper()} ===\n{v.get('raw_output', '')[:1000]}"
@@ -308,4 +316,55 @@ def run_cycle(
             cycle.claude_raw_output = votes_summary[:5000]
             session.commit()
 
+    # Record flat-HOLD opportunity for missed-opportunity analysis
+    if decision == "HOLD" and not in_position and mid_price and settings.hold_reflection_enabled:
+        try:
+            _record_hold_opportunity(cycle_id, coin, mid_price)
+        except Exception as e:
+            logger.error(f"Failed to record hold opportunity: {e}")
+
     return {"decision": decision, "reason": reasoning}
+
+
+def _record_hold_opportunity(cycle_id: int, coin: str, hold_price: float) -> None:
+    """Create a HoldOpportunity record if no recent pending one exists (dedup within 30min)."""
+    from src.hold_reflection import archive_hold_charts
+
+    dedup_cutoff = datetime.utcnow() - timedelta(minutes=30)
+
+    with get_session() as session:
+        recent = (
+            session.query(HoldOpportunity)
+            .filter(
+                HoldOpportunity.coin == coin,
+                HoldOpportunity.status == "pending",
+                HoldOpportunity.hold_time >= dedup_cutoff,
+            )
+            .first()
+        )
+        if recent:
+            logger.info(
+                f"Skipping hold opportunity — recent pending exists (id={recent.id})"
+            )
+            return
+
+        opp = HoldOpportunity(
+            cycle_id=cycle_id,
+            coin=coin,
+            hold_price=hold_price,
+            hold_time=datetime.utcnow(),
+            status="pending",
+        )
+        session.add(opp)
+        session.commit()
+        opp_id = opp.id
+
+    # Archive charts outside the session
+    archive_dir = archive_hold_charts(opp_id, coin)
+    if archive_dir:
+        with get_session() as session:
+            opp = session.query(HoldOpportunity).filter(HoldOpportunity.id == opp_id).first()
+            if opp:
+                opp.chart_archive_dir = archive_dir
+                session.commit()
+    logger.info(f"Recorded hold opportunity id={opp_id} at price={hold_price}")

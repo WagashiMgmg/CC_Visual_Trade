@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     emergency_price_move_minutes: int = 5   # Time window for price move detection
     emergency_cooldown_minutes: int = 15    # Minimum interval between emergency cycles
 
+    # Hold reflection (missed opportunity analysis)
+    hold_reflection_enabled: bool = True
+    hold_reflection_window_hours: int = 4
+    hold_reflection_min_pnl_multiplier: float = 3.0  # min hypothetical PnL as multiple of round-trip fees
+    hold_reflection_max_daily: int = 2
+
     # Internals (not from .env)
     candle_count: int = 100
     limit_order_timeout_secs: int = 30

@@ -50,6 +50,7 @@ class Cycle(Base):
     action_taken = Column(String(20), nullable=True)  # 'long' | 'short' | 'hold' | 'skipped' | 'error'
     skip_reason = Column(String(200), nullable=True)
     claude_raw_output = Column(Text, nullable=True)
+    mid_price = Column(Float, nullable=True)
 
 
 class MagiVote(Base):
@@ -78,6 +79,26 @@ class Reflection(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class HoldOpportunity(Base):
+    """Tracks flat-HOLD decisions for deferred missed-opportunity analysis."""
+
+    __tablename__ = "hold_opportunities"
+
+    id = Column(Integer, primary_key=True)
+    cycle_id = Column(Integer, ForeignKey("cycles.id"), nullable=False, index=True)
+    coin = Column(String(20), nullable=False)
+    hold_price = Column(Float, nullable=False)
+    hold_time = Column(DateTime, nullable=False)
+    chart_archive_dir = Column(String(500), nullable=True)
+    check_time = Column(DateTime, nullable=True)
+    max_favorable_price = Column(Float, nullable=True)
+    max_favorable_direction = Column(String(10), nullable=True)  # 'long' | 'short'
+    hypothetical_pnl = Column(Float, nullable=True)
+    status = Column(String(20), default="pending")  # pending | checked | reflected | skipped
+    reflection_path = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 Base.metadata.create_all(engine)
 
 # Migrate existing tables: add cycle_id to trades if missing
@@ -86,6 +107,9 @@ with engine.connect() as conn:
     cols = [row[1] for row in conn.execute(text("PRAGMA table_info(trades)"))]
     if "cycle_id" not in cols:
         conn.execute(text("ALTER TABLE trades ADD COLUMN cycle_id INTEGER REFERENCES cycles(id)"))
+    cols_cycles = [row[1] for row in conn.execute(text("PRAGMA table_info(cycles)"))]
+    if "mid_price" not in cols_cycles:
+        conn.execute(text("ALTER TABLE cycles ADD COLUMN mid_price REAL"))
 
 
 @contextmanager

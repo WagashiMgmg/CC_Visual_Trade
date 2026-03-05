@@ -100,6 +100,15 @@ def emergency_check():
         logger.error(f"Emergency check failed: {e}")
 
 
+def hold_opportunity_check():
+    """Check if any past HOLD decisions missed profitable opportunities."""
+    from src.hold_reflection import check_pending_opportunities
+    try:
+        check_pending_opportunities()
+    except Exception as e:
+        logger.error(f"Hold opportunity check failed: {e}")
+
+
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
 scheduler = BackgroundScheduler(timezone="UTC")
@@ -134,6 +143,15 @@ async def lifespan(app: FastAPI):
         seconds=30,
         id="emergency_check",
         name="Emergency Position Monitor",
+        max_instances=1,
+        coalesce=True,
+    )
+    # Missed-opportunity checker every 30 minutes
+    scheduler.add_job(
+        hold_opportunity_check,
+        IntervalTrigger(minutes=30),
+        id="hold_opportunity_check",
+        name="Hold Opportunity Check",
         max_instances=1,
         coalesce=True,
     )
