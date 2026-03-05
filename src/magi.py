@@ -3,7 +3,7 @@ MAGI System — EVA-inspired multi-agent voting for trade decisions.
 
 Melchior  = Claude Code CLI   (master agent)
 Balthazar = Gemini CLI
-Caspar    = placeholder (future expansion)
+Caspar    = Codex CLI (planned) — 一時的に Claude Haiku で代替実装中
 
 Voting rounds:
   Round 0: Independent analysis
@@ -214,15 +214,77 @@ class GeminiAgent(MagiAgent):
             return None, False
 
 
-# ── Caspar (placeholder) ──────────────────────────────────────────────────────
+# ── Caspar (Codex CLI — 一時的に Claude Haiku で代替) ────────────────────────
+#
+# 本来は OpenAI Codex CLI を使用予定。
+# Codex CLI が利用可能になったら以下の TODO を実装して切り替える:
+#
+#   TODO(codex): _BACKEND を "codex" に変更し、_run_codex() を有効化する。
+#                Claude Haiku 関連のコード (_run_claude_haiku) は削除可。
+#
+# ダッシュボード表示名は "Codex" のまま維持する（display フィールドは変更不要）。
 
 class CasparAgent(MagiAgent):
     name      = "caspar"
-    display   = "Caspar"
-    available = False
+    display   = "Caspar"  # ダッシュボードでは "Codex" と表示される（index.html 参照）
+    available = True
+
+    # 切り替えポイント: "haiku"（現在）→ "codex"（Codex CLI 利用可能後）
+    _BACKEND = "haiku"
+
+    # Claude Haiku モデルID（一時的な代替）
+    _HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
     def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
-        return None
+        if self._BACKEND == "codex":
+            # TODO(codex): Codex CLI が利用可能になったら実装する
+            return self._run_codex(prompt, charts)
+        return self._run_claude_haiku(prompt, charts, allowed_tools)
+
+    def _run_claude_haiku(self, prompt: str, charts: list[str], allowed_tools: str) -> dict | None:
+        """一時的な代替: Claude Haiku を claude CLI の --model で呼び出す。"""
+        try:
+            result = subprocess.run(
+                [
+                    "claude",
+                    "-p", prompt,
+                    "--model", self._HAIKU_MODEL,
+                    "--allowedTools", allowed_tools,
+                    "--permission-mode", "bypassPermissions",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                cwd="/app",
+                env=os.environ.copy(),
+            )
+            if result.stderr:
+                logger.debug(f"[Caspar/Haiku] stderr: {result.stderr[:200]}")
+            if result.returncode != 0:
+                logger.error(f"[Caspar/Haiku] non-zero exit ({result.returncode}) — marking OFFLINE")
+                self.available = False
+                return None
+            if not _DECISION_RE.search(result.stdout):
+                logger.warning("[Caspar/Haiku] no explicit DECISION in output — abstaining")
+                return None
+            return _parse_vote(result.stdout)
+        except subprocess.TimeoutExpired:
+            logger.error("[Caspar/Haiku] timed out — marking OFFLINE")
+            self.available = False
+            return None
+        except FileNotFoundError:
+            logger.error("[Caspar/Haiku] claude CLI not found — marking OFFLINE")
+            self.available = False
+            return None
+        except Exception as e:
+            logger.error(f"[Caspar/Haiku] error: {e} — marking OFFLINE")
+            self.available = False
+            return None
+
+    def _run_codex(self, prompt: str, charts: list[str]) -> dict | None:
+        """TODO(codex): Codex CLI 実装。_BACKEND = "codex" に切り替え後に完成させる。"""
+        # 例: subprocess.run(["codex", "-p", prompt, ...], ...)
+        raise NotImplementedError("Codex CLI 未実装")
 
 
 # ── MagiSystem ────────────────────────────────────────────────────────────────
