@@ -176,8 +176,12 @@ def _plot_chart(
             def _make_emoji_img(char: str, size: int = 48) -> "np.ndarray":
                 efont = ImageFont.truetype(
                     "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 109)
-                canvas = PILImage.new("RGBA", (109, 109), (0, 0, 0, 0))
-                ImageDraw.Draw(canvas).text((0, 0), char, font=efont, embedded_color=True)
+                # Draw on larger canvas to avoid clipping, then crop to content
+                canvas = PILImage.new("RGBA", (160, 160), (0, 0, 0, 0))
+                ImageDraw.Draw(canvas).text((25, 25), char, font=efont, embedded_color=True)
+                bbox = canvas.getbbox()
+                if bbox:
+                    canvas = canvas.crop(bbox)
                 return np.array(canvas.resize((size, size), PILImage.LANCZOS))
 
             gc_img = _make_emoji_img("🚀")
@@ -190,6 +194,7 @@ def _plot_chart(
                         (xi, val), frameon=False, zorder=1.5,
                         box_alignment=(0.5, 1.0),  # top of box at SMA → rocket below
                     )
+                    ab.set_clip_on(False)
                     ax.add_artist(ab)
             for idx, val in dc_markers.items():
                 if not pd.isna(val):
@@ -199,6 +204,7 @@ def _plot_chart(
                         (xi, val), frameon=False, zorder=1.5,
                         box_alignment=(0.5, 0.0),  # bottom of box at SMA → hammer above
                     )
+                    ab.set_clip_on(False)
                     ax.add_artist(ab)
         except Exception as e:
             logger.warning(f"Emoji annotation failed: {e}")
