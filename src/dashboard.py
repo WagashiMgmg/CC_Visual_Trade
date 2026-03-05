@@ -10,6 +10,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from src.config import settings
+from collections import defaultdict
+
 from src.database import Cycle, MagiVote, Trade, get_session
 
 router = APIRouter()
@@ -352,6 +354,198 @@ def _get_recent_cycles(limit=10):
         ]
 
 
+def _get_magi_analytics():
+    """Compute all MAGI analytics in a single session."""
+    agents = ["melchior", "balthazar", "caspar"]
+    empty = {
+        "total_cycles": 0,
+        "dist_overall": {"LONG": 0, "SHORT": 0, "HOLD": 0, "EXIT": 0},
+        "dist_per_agent": {a: {"LONG": 0, "SHORT": 0, "HOLD": 0, "EXIT": 0} for a in agents},
+        "hold_rate": {"labels": [], "values": []},
+        "rounds_dist": [0, 0, 0, 0],
+        "initial_agreement": {a: 0 for a in agents},
+        "consensus_count": 0,
+        "master_override_count": 0,
+        "agreement_matrix": {"mel_bal": 0, "mel_cas": 0, "bal_cas": 0},
+        "winrate_by_agent": {a: 0 for a in agents},
+        "trades_by_agent": {a: 0 for a in agents},
+        "response_time": {"labels": [], "melchior": [], "balthazar": [], "caspar": []},
+        "avg_response_time": {a: 0 for a in agents},
+    }
+
+    with get_session() as session:
+        cycles = (
+            session.query(Cycle)
+            .filter(Cycle.ai_decision.isnot(None))
+            .order_by(Cycle.timestamp)
+            .all()
+        )
+        if not cycles:
+            return empty
+
+        all_votes = session.query(MagiVote).all()
+        trades = (
+            session.query(Trade)
+            .filter(Trade.status == "closed", Trade.pnl_usd.isnot(None))
+            .all()
+        )
+
+        # Index votes by cycle_id
+        votes_by_cycle = defaultdict(list)
+        for v in all_votes:
+            votes_by_cycle[v.cycle_id].append(v)
+
+        # Index trades by cycle_id
+        trades_by_cycle = {}
+        for t in trades:
+            if t.cycle_id:
+                trades_by_cycle[t.cycle_id] = t
+
+        total_cycles = len(cycles)
+        dist_overall = {"LONG": 0, "SHORT": 0, "HOLD": 0, "EXIT": 0}
+        dist_per_agent = {a: {"LONG": 0, "SHORT": 0, "HOLD": 0, "EXIT": 0} for a in agents}
+        rounds_dist = [0, 0, 0, 0]
+        consensus_count = 0
+        master_override_count = 0
+        initial_agree = {a: 0 for a in agents}
+        initial_total = {a: 0 for a in agents}
+        # Agreement matrix: pairwise round-0 agreement
+        pair_agree = {"mel_bal": 0, "mel_cas": 0, "bal_cas": 0}
+        pair_total = {"mel_bal": 0, "mel_cas": 0, "bal_cas": 0}
+        # Win rate by agent: when agent's round-0 vote == final decision and trade exists
+        agent_wins = {a: 0 for a in agents}
+        agent_trade_count = {a: 0 for a in agents}
+        # Response time
+        resp_labels = []
+        resp_times = {a: [] for a in agents}
+        resp_sums = {a: 0.0 for a in agents}
+        resp_counts = {a: 0 for a in agents}
+        # Hold rate rolling
+        hold_flags = []
+
+        for cycle in cycles:
+            decision = cycle.ai_decision
+            if decision in dist_overall:
+                dist_overall[decision] += 1
+
+            cvotes = votes_by_cycle.get(cycle.id, [])
+            if not cvotes:
+                hold_flags.append(1 if decision == "HOLD" else 0)
+                continue
+
+            # Max round for this cycle
+            max_round = max(v.round for v in cvotes)
+            if max_round < len(rounds_dist):
+                rounds_dist[max_round] += 1
+
+            # Round 0 votes per agent
+            r0_by_agent = {}
+            for v in cvotes:
+                if v.round == 0 and v.agent_name in agents:
+                    r0_by_agent[v.agent_name] = v
+                    d = v.decision
+                    if d in dist_per_agent[v.agent_name]:
+                        dist_per_agent[v.agent_name][d] += 1
+
+            # Initial agreement with final decision
+            for a in agents:
+                if a in r0_by_agent:
+                    initial_total[a] += 1
+                    if r0_by_agent[a].decision == decision:
+                        initial_agree[a] += 1
+
+            # Pairwise agreement (round 0)
+            if "melchior" in r0_by_agent and "balthazar" in r0_by_agent:
+                pair_total["mel_bal"] += 1
+                if r0_by_agent["melchior"].decision == r0_by_agent["balthazar"].decision:
+                    pair_agree["mel_bal"] += 1
+            if "melchior" in r0_by_agent and "caspar" in r0_by_agent:
+                pair_total["mel_cas"] += 1
+                if r0_by_agent["melchior"].decision == r0_by_agent["caspar"].decision:
+                    pair_agree["mel_cas"] += 1
+            if "balthazar" in r0_by_agent and "caspar" in r0_by_agent:
+                pair_total["bal_cas"] += 1
+                if r0_by_agent["balthazar"].decision == r0_by_agent["caspar"].decision:
+                    pair_agree["bal_cas"] += 1
+
+            # Consensus vs master override
+            final_round_votes = [v for v in cvotes if v.round == max_round]
+            agree_count = sum(1 for v in final_round_votes if v.decision == decision)
+            if agree_count > len(final_round_votes) / 2:
+                consensus_count += 1
+            else:
+                master_override_count += 1
+
+            # Win rate by agent (round 0 vote == final decision, trade closed)
+            trade = trades_by_cycle.get(cycle.id)
+            if trade:
+                for a in agents:
+                    if a in r0_by_agent and r0_by_agent[a].decision == decision:
+                        agent_trade_count[a] += 1
+                        if (trade.pnl_usd or 0) > 0:
+                            agent_wins[a] += 1
+
+            # Response time (round 0)
+            if cycle.timestamp:
+                label = cycle.timestamp.strftime("%m/%d %H:%M")
+                resp_labels.append(label)
+                for a in agents:
+                    if a in r0_by_agent and r0_by_agent[a].timestamp and cycle.timestamp:
+                        diff = (r0_by_agent[a].timestamp - cycle.timestamp).total_seconds()
+                        diff = max(0, diff)
+                        resp_times[a].append(round(diff, 1))
+                        resp_sums[a] += diff
+                        resp_counts[a] += 1
+                    else:
+                        resp_times[a].append(None)
+
+            hold_flags.append(1 if decision == "HOLD" else 0)
+
+        # Hold rate: 10-cycle rolling average
+        hold_labels = []
+        hold_values = []
+        window = 10
+        for i in range(len(cycles)):
+            start = max(0, i - window + 1)
+            window_flags = hold_flags[start:i + 1]
+            rate = round(sum(window_flags) / len(window_flags) * 100, 1)
+            hold_labels.append(cycles[i].timestamp.strftime("%m/%d %H:%M") if cycles[i].timestamp else str(i))
+            hold_values.append(rate)
+
+        return {
+            "total_cycles": total_cycles,
+            "dist_overall": dist_overall,
+            "dist_per_agent": dist_per_agent,
+            "hold_rate": {"labels": hold_labels, "values": hold_values},
+            "rounds_dist": rounds_dist,
+            "initial_agreement": {
+                a: round(initial_agree[a] / initial_total[a] * 100, 1) if initial_total[a] else 0
+                for a in agents
+            },
+            "consensus_count": consensus_count,
+            "master_override_count": master_override_count,
+            "agreement_matrix": {
+                k: round(pair_agree[k] / pair_total[k] * 100, 1) if pair_total[k] else 0
+                for k in pair_agree
+            },
+            "winrate_by_agent": {
+                a: round(agent_wins[a] / agent_trade_count[a] * 100, 1) if agent_trade_count[a] else 0
+                for a in agents
+            },
+            "trades_by_agent": agent_trade_count,
+            "response_time": {
+                "labels": resp_labels,
+                "melchior": resp_times["melchior"],
+                "balthazar": resp_times["balthazar"],
+                "caspar": resp_times["caspar"],
+            },
+            "avg_response_time": {
+                a: round(resp_sums[a] / resp_counts[a], 1) if resp_counts[a] else 0
+                for a in agents
+            },
+        }
+
+
 # ── routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/", response_class=HTMLResponse)
@@ -422,6 +616,14 @@ async def cycles_page(request: Request):
             "request": request,
             "cycles": _get_all_cycles(200),
         },
+    )
+
+
+@router.get("/stats", response_class=HTMLResponse)
+async def stats_page(request: Request):
+    return templates.TemplateResponse(
+        "stats.html",
+        {"request": request, "analytics": _get_magi_analytics(), "page": "stats"},
     )
 
 

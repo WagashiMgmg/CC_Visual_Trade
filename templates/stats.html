@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% set page = "stats" %}
+
+{% block content %}
+{% if analytics.total_cycles == 0 %}
+<div class="card">
+  <div class="no-data-placeholder">No data yet</div>
+</div>
+{% else %}
+
+{# ── Row 1: Summary Cards ── #}
+<div class="grid grid-3">
+  <div class="card analytics-stat-card">
+    <div class="analytics-stat-value">{{ analytics.total_cycles }}</div>
+    <div class="analytics-stat-label">Total Cycles</div>
+  </div>
+  <div class="card analytics-stat-card">
+    {% set total_decisions = analytics.consensus_count + analytics.master_override_count %}
+    {% if total_decisions > 0 %}
+    <div class="analytics-stat-value" style="color: var(--green);">{{ (analytics.consensus_count / total_decisions * 100) | round(1) }}%</div>
+    {% else %}
+    <div class="analytics-stat-value" style="color: var(--muted);">--</div>
+    {% endif %}
+    <div class="analytics-stat-label">Consensus Rate</div>
+  </div>
+  <div class="card analytics-stat-card">
+    {% set rd = analytics.rounds_dist %}
+    {% set total_rd = rd[0] + rd[1] + rd[2] + rd[3] %}
+    {% if total_rd > 0 %}
+    <div class="analytics-stat-value" style="color: var(--blue);">{{ ((rd[0]*0 + rd[1]*1 + rd[2]*2 + rd[3]*3) / total_rd) | round(1) }}</div>
+    {% else %}
+    <div class="analytics-stat-value" style="color: var(--muted);">--</div>
+    {% endif %}
+    <div class="analytics-stat-label">Avg Rounds</div>
+  </div>
+</div>
+
+{# ── Row 2: Decision Distribution ── #}
+<div class="grid grid-2">
+  <div class="card">
+    <div class="card-label">Overall Decision Distribution</div>
+    <div class="chart-container">
+      <canvas id="chart-dist-overall"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-label">Agent Round-0 Vote Distribution</div>
+    <div class="chart-container">
+      <canvas id="chart-dist-agent"></canvas>
+    </div>
+  </div>
+</div>
+
+{# ── Row 3: Hold Rate & Rounds ── #}
+<div class="grid grid-2">
+  <div class="card">
+    <div class="card-label">Hold Rate Trend (10-cycle rolling)</div>
+    <div class="chart-container">
+      <canvas id="chart-hold-rate"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-label">Rounds Needed for Decision</div>
+    <div class="chart-container">
+      <canvas id="chart-rounds"></canvas>
+    </div>
+  </div>
+</div>
+
+{# ── Row 4: Agreement & Override ── #}
+<div class="grid grid-2">
+  <div class="card">
+    <div class="card-label">Initial vs Final Agreement</div>
+    <div class="chart-container">
+      <canvas id="chart-agreement"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-label">Consensus vs Master Override</div>
+    <div class="chart-container">
+      <canvas id="chart-consensus"></canvas>
+    </div>
+  </div>
+</div>
+
+{# ── Row 5: Agreement Matrix & Win Rate ── #}
+<div class="grid grid-2">
+  <div class="card">
+    <div class="card-label">Agent Agreement Matrix (Round 0)</div>
+    <table class="agreement-matrix">
+      <thead>
+        <tr><th></th><th>Melchior</th><th>Balthazar</th><th>Caspar</th></tr>
+      </thead>
+      <tbody>
+        {% set m = analytics.agreement_matrix %}
+        <tr>
+          <th>Melchior</th>
+          <td>--</td>
+          <td class="{% if m.mel_bal >= 70 %}high{% elif m.mel_bal >= 40 %}mid{% else %}low{% endif %}">{{ m.mel_bal }}%</td>
+          <td class="{% if m.mel_cas >= 70 %}high{% elif m.mel_cas >= 40 %}mid{% else %}low{% endif %}">{{ m.mel_cas }}%</td>
+        </tr>
+        <tr>
+          <th>Balthazar</th>
+          <td class="{% if m.mel_bal >= 70 %}high{% elif m.mel_bal >= 40 %}mid{% else %}low{% endif %}">{{ m.mel_bal }}%</td>
+          <td>--</td>
+          <td class="{% if m.bal_cas >= 70 %}high{% elif m.bal_cas >= 40 %}mid{% else %}low{% endif %}">{{ m.bal_cas }}%</td>
+        </tr>
+        <tr>
+          <th>Caspar</th>
+          <td class="{% if m.mel_cas >= 70 %}high{% elif m.mel_cas >= 40 %}mid{% else %}low{% endif %}">{{ m.mel_cas }}%</td>
+          <td class="{% if m.bal_cas >= 70 %}high{% elif m.bal_cas >= 40 %}mid{% else %}low{% endif %}">{{ m.bal_cas }}%</td>
+          <td>--</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-label">Win Rate by Agent</div>
+    <div class="chart-container">
+      <canvas id="chart-winrate"></canvas>
+    </div>
+  </div>
+</div>
+
+{# ── Row 6: Response Time ── #}
+<div class="card">
+  <div class="card-label">Agent Response Time (Round 0, seconds)</div>
+  <div class="chart-container-tall">
+    <canvas id="chart-response-time"></canvas>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if analytics.total_cycles > 0 %}
+<script>
+const A = {{ analytics | tojson }};
+
+const COLORS = {
+  LONG: '#3fb950', SHORT: '#f85149', HOLD: '#e3b341', EXIT: '#58a6ff',
+  melchior: '#58a6ff', balthazar: '#d2a8ff', caspar: '#ff9900',
+};
+
+const darkOpts = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { labels: { color: '#c9d1d9', font: { size: 11 } } },
+  },
+  scales: {
+    x: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } },
+    y: { ticks: { color: '#8b949e', font: { size: 10 } }, grid: { color: '#21262d' } },
+  },
+};
+
+// Overall decision donut
+new Chart(document.getElementById('chart-dist-overall'), {
+  type: 'doughnut',
+  data: {
+    labels: ['LONG', 'SHORT', 'HOLD', 'EXIT'],
+    datasets: [{
+      data: [A.dist_overall.LONG, A.dist_overall.SHORT, A.dist_overall.HOLD, A.dist_overall.EXIT],
+      backgroundColor: [COLORS.LONG, COLORS.SHORT, COLORS.HOLD, COLORS.EXIT],
+      borderWidth: 0,
+    }],
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'right', labels: { color: '#c9d1d9', font: { size: 11 }, padding: 12 } } },
+  },
+});
+
+// Agent round-0 horizontal stacked bar
+new Chart(document.getElementById('chart-dist-agent'), {
+  type: 'bar',
+  data: {
+    labels: ['Melchior', 'Balthazar', 'Caspar'],
+    datasets: ['LONG', 'SHORT', 'HOLD', 'EXIT'].map(d => ({
+      label: d,
+      data: [A.dist_per_agent.melchior[d], A.dist_per_agent.balthazar[d], A.dist_per_agent.caspar[d]],
+      backgroundColor: COLORS[d],
+    })),
+  },
+  options: {
+    ...darkOpts, indexAxis: 'y',
+    scales: {
+      x: { stacked: true, ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
+      y: { stacked: true, ticks: { color: '#8b949e' }, grid: { display: false } },
+    },
+    plugins: { legend: { labels: { color: '#c9d1d9', font: { size: 11 } } } },
+  },
+});
+
+// Hold rate trend
+new Chart(document.getElementById('chart-hold-rate'), {
+  type: 'line',
+  data: {
+    labels: A.hold_rate.labels,
+    datasets: [{
+      label: 'Hold Rate %',
+      data: A.hold_rate.values,
+      borderColor: COLORS.HOLD,
+      backgroundColor: 'rgba(227,179,65,.1)',
+      fill: true, tension: 0.3, pointRadius: 1,
+    }],
+  },
+  options: {
+    ...darkOpts,
+    scales: {
+      x: { ticks: { color: '#8b949e', font: { size: 9 }, maxTicksLimit: 10 }, grid: { color: '#21262d' } },
+      y: { min: 0, max: 100, ticks: { color: '#8b949e', callback: v => v + '%' }, grid: { color: '#21262d' } },
+    },
+  },
+});
+
+// Rounds distribution
+new Chart(document.getElementById('chart-rounds'), {
+  type: 'bar',
+  data: {
+    labels: ['Round 0', 'Round 1', 'Round 2', 'Round 3'],
+    datasets: [{
+      data: A.rounds_dist,
+      backgroundColor: ['#58a6ff', '#d2a8ff', '#ff9900', '#f85149'],
+    }],
+  },
+  options: {
+    ...darkOpts,
+    plugins: { legend: { display: false } },
+  },
+});
+
+// Initial vs Final agreement
+new Chart(document.getElementById('chart-agreement'), {
+  type: 'bar',
+  data: {
+    labels: ['Melchior', 'Balthazar', 'Caspar'],
+    datasets: [{
+      label: 'Agreement %',
+      data: [A.initial_agreement.melchior, A.initial_agreement.balthazar, A.initial_agreement.caspar],
+      backgroundColor: [COLORS.melchior, COLORS.balthazar, COLORS.caspar],
+    }],
+  },
+  options: {
+    ...darkOpts,
+    scales: {
+      x: { ticks: { color: '#8b949e' }, grid: { display: false } },
+      y: { min: 0, max: 100, ticks: { color: '#8b949e', callback: v => v + '%' }, grid: { color: '#21262d' } },
+    },
+    plugins: { legend: { display: false } },
+  },
+});
+
+// Consensus vs Master Override donut
+new Chart(document.getElementById('chart-consensus'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Consensus', 'Master Override'],
+    datasets: [{
+      data: [A.consensus_count, A.master_override_count],
+      backgroundColor: ['#3fb950', '#f85149'],
+      borderWidth: 0,
+    }],
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'right', labels: { color: '#c9d1d9', font: { size: 11 }, padding: 12 } } },
+  },
+});
+
+// Win rate by agent
+new Chart(document.getElementById('chart-winrate'), {
+  type: 'bar',
+  data: {
+    labels: ['Melchior', 'Balthazar', 'Caspar'],
+    datasets: [{
+      label: 'Win Rate %',
+      data: [A.winrate_by_agent.melchior, A.winrate_by_agent.balthazar, A.winrate_by_agent.caspar],
+      backgroundColor: [COLORS.melchior, COLORS.balthazar, COLORS.caspar],
+    }],
+  },
+  options: {
+    ...darkOpts,
+    scales: {
+      x: { ticks: { color: '#8b949e' }, grid: { display: false } },
+      y: { min: 0, max: 100, ticks: { color: '#8b949e', callback: v => v + '%' }, grid: { color: '#21262d' } },
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          afterLabel: (ctx) => {
+            const a = ['melchior','balthazar','caspar'][ctx.dataIndex];
+            return `Trades: ${A.trades_by_agent[a]}`;
+          }
+        }
+      }
+    },
+  },
+});
+
+// Response time line chart
+new Chart(document.getElementById('chart-response-time'), {
+  type: 'line',
+  data: {
+    labels: A.response_time.labels,
+    datasets: [
+      { label: 'Melchior', data: A.response_time.melchior, borderColor: COLORS.melchior, tension: 0.3, pointRadius: 2, spanGaps: true },
+      { label: 'Balthazar', data: A.response_time.balthazar, borderColor: COLORS.balthazar, tension: 0.3, pointRadius: 2, spanGaps: true },
+      { label: 'Caspar', data: A.response_time.caspar, borderColor: COLORS.caspar, tension: 0.3, pointRadius: 2, spanGaps: true },
+    ],
+  },
+  options: {
+    ...darkOpts,
+    scales: {
+      x: { ticks: { color: '#8b949e', font: { size: 9 }, maxTicksLimit: 15 }, grid: { color: '#21262d' } },
+      y: { ticks: { color: '#8b949e', callback: v => v + 's' }, grid: { color: '#21262d' } },
+    },
+  },
+});
+</script>
+{% endif %}
+{% endblock %}

@@ -52,7 +52,7 @@ class MagiAgent:
     def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
         raise NotImplementedError
 
-    def _save_vote(self, cycle_id: int, round_num: int, vote: dict):
+    def _save_vote(self, cycle_id: int, round_num: int, vote: dict, timestamp: datetime | None = None):
         with get_session() as session:
             session.add(MagiVote(
                 cycle_id=cycle_id,
@@ -61,7 +61,7 @@ class MagiAgent:
                 decision=vote["decision"],
                 reasoning=vote.get("reasoning", ""),
                 raw_output=(vote.get("raw_output", "") or "")[:5000],
-                timestamp=datetime.utcnow(),
+                timestamp=timestamp or datetime.utcnow(),
             ))
             session.commit()
 
@@ -326,7 +326,8 @@ class MagiSystem:
         charts: list[str],
         allowed_tools: dict[str, str],  # agent_name → tools string
     ) -> dict[str, dict]:
-        """Run active agents concurrently; return {agent_name: vote}."""
+        """Run active agents concurrently; return {agent_name: vote}.
+        Each vote includes 'completed_at' with actual completion timestamp."""
         active = self._active_agents()
         results: dict[str, dict] = {}
 
@@ -342,9 +343,11 @@ class MagiSystem:
             }
             for future in as_completed(futures):
                 agent = futures[future]
+                completed_at = datetime.utcnow()
                 try:
                     vote = future.result()
                     if vote:
+                        vote["completed_at"] = completed_at
                         results[agent.name] = vote
                     # None → abstain (not counted in majority)
                 except Exception as e:
@@ -357,7 +360,7 @@ class MagiSystem:
         for agent_name, vote in votes.items():
             agent = next((a for a in self.agents if a.name == agent_name), None)
             if agent:
-                agent._save_vote(cycle_id, round_num, vote)
+                agent._save_vote(cycle_id, round_num, vote, timestamp=vote.get("completed_at"))
 
     def _log_round(self, round_num: int, votes: dict[str, dict], consensus: str | None):
         parts = ", ".join(

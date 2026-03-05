@@ -1092,3 +1092,18 @@ details[open] > .reflection-summary::before { transform: rotate(90deg); }
   border-radius: 3px;
   padding: 1px 4px;
 }
+
+/* ── MAGI Analytics ──────────────────────────────────────── */
+.analytics-stat-card { text-align: center; padding: 24px 20px; }
+.analytics-stat-value { font-size: 36px; font-weight: 800; }
+.analytics-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-top: 4px; }
+.chart-container { position: relative; height: 220px; }
+.chart-container-tall { position: relative; height: 280px; }
+.agreement-matrix { width: 100%; border-collapse: collapse; font-size: 13px; }
+.agreement-matrix th, .agreement-matrix td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.agreement-matrix th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.agreement-matrix td { text-align: center; font-weight: 600; }
+.agreement-matrix .high { color: var(--green); }
+.agreement-matrix .mid  { color: var(--yellow); }
+.agreement-matrix .low  { color: var(--red); }
+.no-data-placeholder { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 16px; font-weight: 600; }
