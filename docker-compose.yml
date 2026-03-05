@@ -4,6 +4,8 @@ services:
     ports:
       - "${DASHBOARD_PORT:-8080}:8080"
     env_file: .env
+    environment:
+      - MPLCONFIGDIR=/tmp/matplotlib
     volumes:
       - ./charts:/app/charts
       - ./data:/app/data
