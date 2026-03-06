@@ -120,6 +120,7 @@ def _load_context() -> str:
         with open(_CONTEXT_FILE) as f:
             content = f.read().strip()
         return content.format(
+            position_min_hours=settings.position_min_hours,
             position_max_hours=settings.position_max_hours,
             cycle_interval_minutes=settings.cycle_interval_minutes,
         )

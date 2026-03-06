@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     # Timing (configurable via .env)
     cycle_interval_minutes: int = 60        # How often Claude analyzes charts
+    position_min_hours: int = 2             # Minimum hold time before EXIT is allowed
     position_max_hours: int = 4             # Force-close positions after this many hours
 
     # Emergency thresholds (configurable via .env)

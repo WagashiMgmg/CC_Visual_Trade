@@ -1,7 +1,8 @@
 # Trading System Rules
 
 ## Position Constraints
-- **Hold time: maximum {position_max_hours} hours.** All positions are forcibly closed after {position_max_hours} hours regardless of P&L.
+- **Minimum hold: {position_min_hours} hours.** Do not choose EXIT until at least {position_min_hours} hours have elapsed since entry, unless there is an extreme emergency.
+- **Maximum hold: {position_max_hours} hours.** All positions are forcibly closed after {position_max_hours} hours regardless of P&L.
 - **Analysis interval: every {cycle_interval_minutes} minutes.**
 - Only **one position** can be open at a time.
 - Entry size: $100 USD at 3x leverage (Hyperliquid perpetuals).
