@@ -27,7 +27,7 @@ from src.database import MagiVote, get_session
 logger = logging.getLogger(__name__)
 
 _DECISION_RE = re.compile(r"\*{0,2}DECISION:?\*{0,2}:?\s*(LONG|SHORT|HOLD|EXIT)", re.IGNORECASE)
-_REASON_RE   = re.compile(r"\*{0,2}REASON\*{0,2}:?\s*(.+?)(?:\n\n|\Z)", re.DOTALL)
+_REASON_RE   = re.compile(r"\*{0,2}REASON\**:?\s*\**\s*\n*(.+)", re.DOTALL)
 
 
 def _parse_vote(output: str) -> dict:
