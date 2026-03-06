@@ -19,14 +19,14 @@ from src.trader import calc_pnl
 logger = logging.getLogger(__name__)
 
 _CONTEXT_FILE = "/app/prompt/context.md"
+_DIGEST_FILE = "/app/data/reflection_digest.md"
 
 _PROMPT_TEMPLATE = """\
 {context}
 
 ---
 
-過去の振り返りが `/app/data/reflections/` に蓄積されています。
-Bash で `ls /app/data/reflections/` を確認し、関連しそうなファイルを Read ツールで参照してから判断してください。
+{reflections}
 
 以下の{count}つのチャートを Read ツールで開いてください:
 
@@ -46,8 +46,7 @@ _PROMPT_IN_POSITION = """\
 
 ---
 
-過去の振り返りが `/app/data/reflections/` に蓄積されています。
-Bash で `ls /app/data/reflections/` を確認し、関連しそうなファイルを Read ツールで参照してから判断してください。
+{reflections}
 
 ## エントリー時の判断（{entry_time_str}）
 - 決定: {entry_decision}
@@ -81,8 +80,7 @@ _PROMPT_EMERGENCY = """\
 
 **トリガー**: {emergency_reason}
 
-過去の振り返りが `/app/data/reflections/` に蓄積されています。
-Bash で `ls /app/data/reflections/` を確認し、関連しそうなファイルを Read ツールで参照してから判断してください。
+{reflections}
 
 ## エントリー時の判断（{entry_time_str}）
 - 決定: {entry_decision}
@@ -129,6 +127,14 @@ def _load_context() -> str:
         return ""
 
 
+def _load_reflections() -> str:
+    try:
+        with open(_DIGEST_FILE) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+
+
 def _build_chart_list(charts: list[tuple[str, str, str]]) -> str:
     lines = []
     for i, (interval, label, path) in enumerate(charts, 1):
@@ -153,6 +159,7 @@ def run_cycle(
     chart_paths = [path for _, _, path in charts]
     chart_list_str = _build_chart_list(charts)
     context = _load_context()
+    reflections = _load_reflections()
     in_position = live_position is not None
 
     if in_position:
@@ -197,6 +204,7 @@ def run_cycle(
 
         prompt_vars = dict(
             context=context,
+            reflections=reflections,
             side=live_position["side"].upper(),
             entry_price=live_position["entry_price"],
             elapsed=elapsed_str,
@@ -223,6 +231,7 @@ def run_cycle(
     else:
         base_prompt = _PROMPT_TEMPLATE.format(
             context=context,
+            reflections=reflections,
             count=len(charts),
             chart_list=chart_list_str,
             freshness=freshness_text,

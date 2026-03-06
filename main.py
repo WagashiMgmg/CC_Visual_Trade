@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -112,6 +113,15 @@ def hold_opportunity_check():
         logger.error(f"Hold opportunity check failed: {e}")
 
 
+def digest_curation():
+    """Curate reflection digest (runs every 12 hours)."""
+    from src.digest import curate_digest
+    try:
+        curate_digest()
+    except Exception as e:
+        logger.error(f"Digest curation failed: {e}")
+
+
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
 scheduler = BackgroundScheduler(timezone="UTC")
@@ -155,6 +165,15 @@ async def lifespan(app: FastAPI):
         IntervalTrigger(minutes=30),
         id="hold_opportunity_check",
         name="Hold Opportunity Check",
+        max_instances=1,
+        coalesce=True,
+    )
+    # Reflection digest curation at 03:00 and 15:00 UTC
+    scheduler.add_job(
+        digest_curation,
+        CronTrigger(hour="3,15", minute=0, timezone="UTC"),
+        id="digest_curation",
+        name="Reflection Digest Curation",
         max_instances=1,
         coalesce=True,
     )
