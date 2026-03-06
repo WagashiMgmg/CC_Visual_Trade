@@ -236,7 +236,13 @@ def _get_reflections():
     dir_path = Path("/app/data/reflections")
     if not dir_path.exists():
         return []
-    files = sorted(dir_path.glob("trade_*.md"), key=lambda f: int(f.stem.split("_")[1]), reverse=True)
+    trade_files = list(dir_path.glob("trade_*.md"))
+    hold_files = list(dir_path.glob("hold_*.md"))
+    files = sorted(
+        trade_files + hold_files,
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
     result = []
     for f in files:
         try:
