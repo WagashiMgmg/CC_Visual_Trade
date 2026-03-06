@@ -106,7 +106,7 @@ def _build_reflection_prompt(trade_info: dict, cycle_info: dict | None) -> str:
         for agent_name, v in votes.items():
             votes_lines.append(
                 f"- **{agent_name.capitalize()}** (Round {v['round']}): {v['decision']}\n"
-                f"  {v['reasoning'][:300]}"
+                f"  {v['reasoning'][:400]}"
             )
         votes_str = "\n".join(votes_lines) if votes_lines else "（投票記録なし）"
         reasoning_section = f"""

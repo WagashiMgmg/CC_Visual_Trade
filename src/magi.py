@@ -405,7 +405,7 @@ class MagiSystem:
     ) -> dict[str, str]:
         """Round 1: share other agents' conclusions."""
         others_summary = "\n".join(
-            f"- {name.capitalize()}: {v['decision']} — {v['reasoning'][:200]}"
+            f"- {name.capitalize()}: {v['decision']} — {v['reasoning'][:400]}"
             for name, v in prev_votes.items()
         )
         decision_fmt = "EXIT or HOLD" if in_position else "LONG or SHORT or HOLD"
@@ -431,7 +431,7 @@ class MagiSystem:
     ) -> tuple[dict[str, str], dict[str, str]]:
         """Round 2: internet-augmented research."""
         others_summary = "\n".join(
-            f"- {name.capitalize()}: {v['decision']} — {v['reasoning'][:200]}"
+            f"- {name.capitalize()}: {v['decision']} — {v['reasoning'][:400]}"
             for name, v in prev_votes.items()
         )
         decision_fmt = "EXIT or HOLD" if in_position else "LONG or SHORT or HOLD"
@@ -480,7 +480,7 @@ class MagiSystem:
                 f"【再審議 Round 3 — マスター比較】\n"
                 f"マスターエージェント(Melchior)の判断:\n{melchior_summary}\n\n"
                 f"あなた({agent.display})の前回判断: {my_vote.get('decision', 'HOLD')}\n"
-                f"根拠: {my_vote.get('reasoning', '')[:200]}\n\n"
+                f"根拠: {my_vote.get('reasoning', '')[:400]}\n\n"
                 f"チャートを再確認し、自分の根拠とMelchiorの根拠を論理的に比較して、"
                 f"より強い根拠を持つ判断を採用してください。\n"
                 f"チャートファイル:\n{chart_list}\n\n"
@@ -637,7 +637,7 @@ class MagiSystem:
             anon = anon_map[name]
             vote_lines.append(
                 f"- {anon}: {v['decision']}\n"
-                f"  理由: {v.get('reasoning', '（なし）')[:300]}"
+                f"  理由: {v.get('reasoning', '（なし）')[:400]}"
             )
         votes_text = "\n".join(vote_lines)
 
