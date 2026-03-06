@@ -7,6 +7,12 @@
   <span class="muted mono">{{ reflections|length }} entries</span>
 </div>
 
+{% if digest %}
+<div class="card" style="margin-bottom:20px; border-left:3px solid var(--accent);">
+  <div class="reflection-body" style="padding:16px">{{ digest | safe }}</div>
+</div>
+{% endif %}
+
 {% if not reflections %}
 <div class="card">
   <p class="muted" style="padding:16px">No reflections yet.</p>

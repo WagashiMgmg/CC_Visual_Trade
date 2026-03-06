@@ -606,11 +606,23 @@ async def rules_page(request: Request):
     )
 
 
+def _get_digest():
+    import markdown as md
+    digest_path = Path("/app/data/reflection_digest.md")
+    if not digest_path.exists():
+        return None
+    try:
+        text = digest_path.read_text()
+        return md.markdown(text, extensions=["fenced_code", "tables"])
+    except Exception:
+        return None
+
+
 @router.get("/reflections", response_class=HTMLResponse)
 async def reflections_page(request: Request):
     return templates.TemplateResponse(
         "reflections.html",
-        {"request": request, "reflections": _get_reflections()},
+        {"request": request, "digest": _get_digest(), "reflections": _get_reflections()},
     )
 
 
