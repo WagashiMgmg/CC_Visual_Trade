@@ -55,7 +55,7 @@ def trading_cycle():
 
     logger.info("=== Trading cycle start ===")
     try:
-        charts = generate_multi_tf_charts(
+        charts, freshness = generate_multi_tf_charts(
             settings.trading_coin,
             entry_price=live_pos["entry_price"] if live_pos else None,
             entry_time=live_pos["entry_time"] if live_pos else None,
@@ -68,9 +68,12 @@ def trading_cycle():
         logger.error(f"Chart generation failed: {e}")
         return
 
+    from src.chart import format_cross_freshness
+    freshness_text = format_cross_freshness(freshness)
+
     state.cycle_running = True
     try:
-        result = run_cycle(charts, live_position=live_pos)
+        result = run_cycle(charts, live_position=live_pos, freshness_text=freshness_text)
         logger.info(f"Cycle complete: {result['decision']} — {result['reason'][:60]}")
     except Exception as e:
         logger.error(f"Orchestrator failed: {e}")

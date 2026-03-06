@@ -246,20 +246,79 @@ def _cleanup_old_charts(coin: str) -> None:
                 pass
 
 
+def _cross_freshness(df: pd.DataFrame, interval: str) -> dict:
+    """Extract GC/DC freshness info: bars since last cross, minutes, current SMA state, RSI."""
+    result: dict = {"interval": interval, "sma_state": "neutral", "rsi": None}
+
+    # Current RSI
+    rsi_val = df["RSI"].iloc[-1]
+    if not pd.isna(rsi_val):
+        result["rsi"] = round(rsi_val, 1)
+
+    # SMA state
+    sma20 = df["SMA20"].iloc[-1]
+    sma50 = df["SMA50"].iloc[-1]
+    if not pd.isna(sma20) and not pd.isna(sma50):
+        result["sma_state"] = "GC" if sma20 > sma50 else "DC"
+
+    # Find last GC/DC
+    gc_markers, dc_markers = _sma_cross_markers(df)
+    interval_minutes = _INTERVAL_MS.get(interval, 15 * 60 * 1000) / 60000
+    total_bars = len(df)
+
+    for label, markers in [("last_gc", gc_markers), ("last_dc", dc_markers)]:
+        valid = markers.dropna()
+        if not valid.empty:
+            last_idx = df.index.get_loc(valid.index[-1])
+            bars_ago = total_bars - 1 - last_idx
+            minutes_ago = int(bars_ago * interval_minutes)
+            result[label] = {"bars_ago": bars_ago, "minutes_ago": minutes_ago}
+
+    return result
+
+
+def format_cross_freshness(freshness_list: list[dict]) -> str:
+    """Format cross freshness data as structured text for MAGI prompt."""
+    # Only include short-term timeframes relevant for signal freshness
+    target_intervals = {"1m", "5m", "15m", "30m", "1h"}
+    lines = ["## テクニカル指標サマリー（自動生成）"]
+
+    for f in freshness_list:
+        if f["interval"] not in target_intervals:
+            continue
+        parts = [f"**{f['interval']}**: SMA状態={f['sma_state']}"]
+        if f.get("rsi") is not None:
+            parts.append(f"RSI={f['rsi']}")
+        if "last_gc" in f:
+            gc = f["last_gc"]
+            parts.append(f"最終GC={gc['bars_ago']}本前({gc['minutes_ago']}分前)")
+        if "last_dc" in f:
+            dc = f["last_dc"]
+            parts.append(f"最終DC={dc['bars_ago']}本前({dc['minutes_ago']}分前)")
+        if "last_gc" not in f and "last_dc" not in f:
+            parts.append("GC/DC=表示範囲内になし")
+        lines.append("- " + ", ".join(parts))
+
+    return "\n".join(lines)
+
+
 def generate_multi_tf_charts(
     coin: str,
     entry_price: float | None = None,
     entry_time: datetime | None = None,
     side: str | None = None,
-) -> list[tuple[str, str, str]]:
+) -> tuple[list[tuple[str, str, str]], list[dict]]:
     """
     Generate charts for all timeframes.
-    Returns list of (interval, label, file_path).
+    Returns (chart_list, freshness_list) where:
+        chart_list: list of (interval, label, file_path)
+        freshness_list: list of cross freshness dicts per timeframe
     """
     os.makedirs("/app/charts", exist_ok=True)
     _cleanup_old_charts(coin)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     results = []
+    freshness = []
 
     for interval, count, label in TIMEFRAMES:
         try:
@@ -273,7 +332,8 @@ def generate_multi_tf_charts(
                         entry_price=entry_price, entry_time=entry_time, side=side)
             logger.info(f"Chart saved: {out_path}")
             results.append((interval, label, out_path))
+            freshness.append(_cross_freshness(df, interval))
         except Exception as e:
             logger.error(f"Failed to generate {interval} chart: {e}")
 
-    return results
+    return results, freshness

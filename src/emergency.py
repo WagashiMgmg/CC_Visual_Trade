@@ -105,7 +105,7 @@ def _run_emergency_cycle(reason: str, details: str):
         state.last_emergency_at = datetime.utcnow()
 
         live_pos = get_live_position()
-        charts = generate_multi_tf_charts(
+        charts, freshness = generate_multi_tf_charts(
             settings.trading_coin,
             entry_price=live_pos["entry_price"] if live_pos else None,
             entry_time=live_pos["entry_time"] if live_pos else None,
@@ -114,6 +114,8 @@ def _run_emergency_cycle(reason: str, details: str):
         if not charts:
             logger.error("[EMERGENCY] No charts generated, aborting emergency cycle")
             return
+        from src.chart import format_cross_freshness
+        freshness_text = format_cross_freshness(freshness)
 
         state.cycle_running = True
         try:
@@ -121,6 +123,7 @@ def _run_emergency_cycle(reason: str, details: str):
                 charts,
                 live_position=live_pos,
                 emergency=reason,
+                freshness_text=freshness_text,
             )
             logger.info(
                 f"[EMERGENCY] Cycle complete: {result['decision']} — "
