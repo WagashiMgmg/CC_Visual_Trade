@@ -607,13 +607,78 @@ class MagiSystem:
         rounds_used: int,
         adopted_by: str,
     ) -> dict:
-        # Use Melchior's reasoning as the canonical reason
-        melchior_vote = votes.get("melchior", {})
-        reasoning = melchior_vote.get("reasoning", "")
         return {
             "decision": decision,
-            "reasoning": reasoning,
+            "reasoning": "",  # Will be filled by synthesize_reasoning()
             "rounds": rounds_used,
             "votes": votes,
             "adopted_by": adopted_by,
         }
+
+    def synthesize_reasoning(
+        self,
+        decision: str,
+        votes: dict[str, dict],
+    ) -> str:
+        """Have Melchior synthesize a unified reasoning from all anonymous votes.
+
+        Agents are anonymized (Agent A/B/C) to prevent Melchior from
+        favouring its own prior opinion.  The output summarises pro and
+        con arguments for the decided direction.
+        """
+        # Anonymize agent names
+        agent_names = sorted(votes.keys())
+        anon_map = {name: f"Agent {chr(65 + i)}" for i, name in enumerate(agent_names)}
+
+        # Build anonymous vote summaries
+        vote_lines = []
+        for name in agent_names:
+            v = votes[name]
+            anon = anon_map[name]
+            vote_lines.append(
+                f"- {anon}: {v['decision']}\n"
+                f"  理由: {v.get('reasoning', '（なし）')[:300]}"
+            )
+        votes_text = "\n".join(vote_lines)
+
+        prompt = (
+            f"あなたはMAGIシステムの議事録係です。\n"
+            f"以下の審議結果を統合し、簡潔な日本語のサマリーを作成してください。\n\n"
+            f"## 審議結果\n"
+            f"**最終決定: {decision}**\n\n"
+            f"## 各エージェントの意見（匿名）\n"
+            f"{votes_text}\n\n"
+            f"## 出力フォーマット\n"
+            f"以下の形式で出力してください（マークダウン不要、プレーンテキストで）:\n\n"
+            f"【決定】{decision}\n"
+            f"【賛成意見】決定方向（{decision}）を支持する根拠のサマリー（2-3文）\n"
+            f"【反対意見】決定方向に反対した意見の根拠サマリー（該当があれば2-3文、なければ「全員一致」）\n"
+        )
+
+        try:
+            result = subprocess.run(
+                [
+                    "claude",
+                    "-p", prompt,
+                    "--allowedTools", "",
+                    "--permission-mode", "bypassPermissions",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd="/app",
+                env=os.environ.copy(),
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()[:2000]
+            logger.warning(f"[MAGI] synthesize_reasoning failed (rc={result.returncode})")
+        except Exception as e:
+            logger.error(f"[MAGI] synthesize_reasoning error: {e}")
+
+        # Fallback: simple concatenation of anonymous votes
+        fallback_lines = []
+        for name in agent_names:
+            v = votes[name]
+            anon = anon_map[name]
+            fallback_lines.append(f"{anon}({v['decision']}): {v.get('reasoning', '')[:200]}")
+        return f"【決定】{decision}\n" + "\n".join(fallback_lines)

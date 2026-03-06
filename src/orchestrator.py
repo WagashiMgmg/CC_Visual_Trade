@@ -258,13 +258,11 @@ def run_cycle(
     )
 
     decision  = magi_result["decision"]
-    reasoning = magi_result["reasoning"]
     rounds    = magi_result["rounds"]
     adopted   = magi_result["adopted_by"]
 
     logger.info(
-        f"[MAGI] Final: {decision} | rounds={rounds} | adopted_by={adopted} | "
-        f"reason: {reasoning[:100]}"
+        f"[MAGI] Final: {decision} | rounds={rounds} | adopted_by={adopted}"
     )
 
     # Check for auth errors in any vote output
@@ -283,7 +281,7 @@ def run_cycle(
             color=0xFF0000,
         )
 
-    # Python executes trade scripts (agents no longer call them directly)
+    # 1) Execute trade FIRST to minimise latency from decision to action
     env = {**os.environ, "CYCLE_ID": str(cycle_id)}
     if decision == "LONG":
         subprocess.run(["python", "/app/script/long.py"], env=env)
@@ -292,6 +290,11 @@ def run_cycle(
     elif decision == "EXIT":
         subprocess.run(["python", "/app/script/close.py"])
     # HOLD: do nothing
+
+    # 2) Synthesize unified reasoning AFTER trade execution
+    #    Melchior summarises all anonymous votes into pro/con format
+    reasoning = magi.synthesize_reasoning(decision, magi_result["votes"])
+    logger.info(f"[MAGI] Synthesized reasoning: {reasoning[:100]}")
 
     # Fetch mid price for cycle record
     try:
