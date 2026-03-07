@@ -208,7 +208,7 @@ def run_cycle(
             side=live_position["side"].upper(),
             entry_price=live_position["entry_price"],
             elapsed=elapsed_str,
-            pnl_sign="+" if pnl >= 0 else "",
+            pnl_sign="+" if pnl >= 0 else "-",
             pnl_usd=abs(pnl),
             count=len(charts),
             chart_list=chart_list_str,
