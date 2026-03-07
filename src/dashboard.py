@@ -277,8 +277,8 @@ def _get_reflections():
 
 
 def _get_rules():
-    """Read AGENTS.md as raw HTML (cached by mtime)."""
-    path = "/app/AGENTS.md"
+    """Read rule.html as raw HTML (cached by mtime)."""
+    path = "/app/prompt/rule.html"
     try:
         mtime = os.path.getmtime(path)
     except OSError:

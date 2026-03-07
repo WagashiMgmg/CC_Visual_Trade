@@ -20,7 +20,7 @@ from src.reflection import RULE_CONSISTENCY_CHECK
 
 logger = logging.getLogger(__name__)
 
-AGENTS_MD = "/app/AGENTS.md"
+AGENTS_MD = "/app/prompt/rule.html"
 CHARTS_DIR = "/app/charts"
 REFLECTIONS_DIR = "/app/data/reflections"
 
@@ -214,7 +214,7 @@ ls /app/charts/{coin}_*.png
 （具体的なルール追加・変更・削除。なければ「なし」と記載）
 ```
 
-ステップ5: `/app/AGENTS.md` をReadツールで読み込み、`<h2>学習済みルール</h2>` と `<h2>エントリー推奨条件</h2>` の2セクションをEditツールで更新してください。ファイルはHTMLで記述されています。Markdownではなく正しいHTMLタグを使用し、ファイル冒頭の **ルール管理** と **ルール見直し** に記載されたポリシーに従って以下を行ってください。
+ステップ5: `/app/prompt/rule.html` をReadツールで読み込み、`<h2>学習済みルール</h2>` と `<h2>エントリー推奨条件</h2>` の2セクションをEditツールで更新してください。ファイルはHTMLで記述されています。Markdownではなく正しいHTMLタグを使用し、ファイル冒頭の **ルール管理** と **ルール見直し** に記載されたポリシーに従って以下を行ってください。
 
 **ルール掃除（最重要）:**
 - 今回の見逃し機会の原因となったルールを特定し、**削除または大幅に緩和**すること

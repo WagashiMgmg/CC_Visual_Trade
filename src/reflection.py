@@ -3,7 +3,7 @@ Post-trade reflection module.
 
 After a trade closes, archives the entry charts and launches a Claude subprocess
 to analyze the outcome, write the full reflection to /app/data/reflections/,
-and update the ## 学習済みルール section of /app/AGENTS.md.
+and update the ## 学習済みルール section of /app/prompt/rule.html.
 """
 
 import logging
@@ -13,7 +13,7 @@ import subprocess
 
 logger = logging.getLogger(__name__)
 
-AGENTS_MD = "/app/AGENTS.md"
+AGENTS_MD = "/app/prompt/rule.html"
 CHARTS_DIR = "/app/charts"
 REFLECTIONS_DIR = "/app/data/reflections"
 HYPOTHESES_FILE = "/app/data/reflections/hypotheses.md"
@@ -23,7 +23,7 @@ RULE_CONSISTENCY_CHECK = """
 **ルール整合性チェック（必須）:**
 ステップ4で更新した後、以下の手順で全ルールの論理整合性を検証してください。
 
-1. `/app/AGENTS.md` を再度Readし、`<h2>学習済みルール</h2>` と `<h2>エントリー推奨条件</h2>` の全ルールをPython風擬似コードに変換してください。以下のフォーマットで記述:
+1. `/app/prompt/rule.html` を再度Readし、`<h2>学習済みルール</h2>` と `<h2>エントリー推奨条件</h2>` の全ルールをPython風擬似コードに変換してください。以下のフォーマットで記述:
 
 ```python
 def check_rules(signal, market) -> (bool, str):
@@ -46,7 +46,7 @@ def check_entry_signals(market) -> str | None:
    - **冗長**: 学習済みルールとエントリー推奨条件で同じチェックを二重に行っている
    - **到達不能**: 前段の条件により絶対に到達しないエントリー推奨条件
 
-3. 矛盾・問題が見つかった場合、`/app/AGENTS.md` をEditツールで即座に修正してください:
+3. 矛盾・問題が見つかった場合、`/app/prompt/rule.html` をEditツールで即座に修正してください:
    - スナップショット矛盾 → 時系列条件に書き換え（例: `RSI≥70後に＜65転換` のように状態遷移を明記）
    - 常時ブロック → ルール側に例外追加、またはエントリー条件の前提を修正
    - 冗長 → エントリー推奨条件側の重複チェックを削除（学習済みルールに任せる）
@@ -216,7 +216,7 @@ ls {archive_dir}
 - （具体的なルール追加・変更・削除。なければ「なし」と記載）
 ```
 
-ステップ4: `/app/AGENTS.md` をReadツールで読み込み、`<h2>学習済みルール</h2>` と `<h2>エントリー推奨条件</h2>` の2セクションをEditツールで更新してください。ファイルはHTMLで記述されています。Markdownではなく正しいHTMLタグを使用し、ファイル冒頭の **ルール管理** と **ルール見直し** に記載されたポリシーに従って以下を行ってください。
+ステップ4: `/app/prompt/rule.html` をReadツールで読み込み、`<h2>学習済みルール</h2>` と `<h2>エントリー推奨条件</h2>` の2セクションをEditツールで更新してください。ファイルはHTMLで記述されています。Markdownではなく正しいHTMLタグを使用し、ファイル冒頭の **ルール管理** と **ルール見直し** に記載されたポリシーに従って以下を行ってください。
 
 **ルール掃除（最重要）:**
 - 適用回数が5回以上かつWIN率40%以下のルールは**削除を強く推奨**（改定ではなく削除を優先）

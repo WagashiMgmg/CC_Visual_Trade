@@ -19,6 +19,7 @@ from src.trader import calc_pnl
 logger = logging.getLogger(__name__)
 
 _CONTEXT_FILE = "/app/prompt/context.md"
+_RULE_FILE = "/app/prompt/rule.html"
 _DIGEST_FILE = "/app/data/reflection_digest.md"
 
 _PROMPT_TEMPLATE = """\
@@ -117,14 +118,21 @@ def _load_context() -> str:
     try:
         with open(_CONTEXT_FILE) as f:
             content = f.read().strip()
-        return content.format(
+        context = content.format(
             position_min_hours=settings.position_min_hours,
             position_max_hours=settings.position_max_hours,
             cycle_interval_minutes=settings.cycle_interval_minutes,
         )
     except FileNotFoundError:
         logger.warning(f"Context file not found: {_CONTEXT_FILE}")
-        return ""
+        context = ""
+    try:
+        with open(_RULE_FILE) as f:
+            rules = f.read().strip()
+        context = context + "\n\n## トレードルール\n" + rules if rules else context
+    except FileNotFoundError:
+        logger.warning(f"Rule file not found: {_RULE_FILE}")
+    return context
 
 
 def _load_reflections() -> str:
