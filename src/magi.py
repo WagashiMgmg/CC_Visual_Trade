@@ -98,10 +98,12 @@ class ClaudeAgent(MagiAgent):
                 cwd="/app",
                 env=os.environ.copy(),
             )
-            if result.stderr:
-                logger.debug(f"[Melchior] stderr: {result.stderr[:200]}")
             if result.returncode != 0:
-                logger.error(f"[Melchior] non-zero exit ({result.returncode}) — marking OFFLINE")
+                logger.error(
+                    f"[Melchior] non-zero exit ({result.returncode}) — marking OFFLINE"
+                    f"\n  stderr: {result.stderr[:400]}"
+                    f"\n  stdout: {result.stdout[:200]}"
+                )
                 self.available = False
                 return None
             if not _DECISION_RE.search(result.stdout):
@@ -258,10 +260,12 @@ class CasparAgent(MagiAgent):
                 cwd="/app",
                 env=os.environ.copy(),
             )
-            if result.stderr:
-                logger.debug(f"[Caspar/Haiku] stderr: {result.stderr[:200]}")
             if result.returncode != 0:
-                logger.error(f"[Caspar/Haiku] non-zero exit ({result.returncode}) — marking OFFLINE")
+                logger.error(
+                    f"[Caspar/Haiku] non-zero exit ({result.returncode}) — marking OFFLINE"
+                    f"\n  stderr: {result.stderr[:400]}"
+                    f"\n  stdout: {result.stdout[:200]}"
+                )
                 self.available = False
                 return None
             if not _DECISION_RE.search(result.stdout):
@@ -671,7 +675,10 @@ class MagiSystem:
             )
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()[:2000]
-            logger.warning(f"[MAGI] synthesize_reasoning failed (rc={result.returncode})")
+            logger.warning(
+                f"[MAGI] synthesize_reasoning failed (rc={result.returncode})"
+                f"\n  stderr: {result.stderr[:400]}"
+            )
         except Exception as e:
             logger.error(f"[MAGI] synthesize_reasoning error: {e}")
 

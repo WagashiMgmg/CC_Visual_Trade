@@ -698,6 +698,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px;
+  min-width: 0;
 }
 .vote-card-long  { border-left: 3px solid var(--green); }
 .vote-card-short { border-left: 3px solid var(--red); }
@@ -721,6 +722,8 @@ body {
   max-height: 120px;
   overflow-y: auto;
   white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* Consensus reasoning */
