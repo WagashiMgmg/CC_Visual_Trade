@@ -344,7 +344,6 @@ body {
 /* Card wrapper */
 .card-magi {
   background: var(--surface);
-  border-color: var(--magi-orange);
   padding: 12px 14px;
   margin-bottom: var(--gap);
 }
