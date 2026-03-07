@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     hyperliquid_main_address: str = ""      # Main account address (holds funds / positions)
     testnet: bool = False
 
+    # Testnet-specific credentials (used when TESTNET=true)
+    test_hyperliquid_private_key: str = ""
+    test_hyperliquid_account_address: str = ""
+    test_hyperliquid_main_address: str = ""
+
     # Trading
     trading_coin: str = "BTC"
     position_size_usd: float = 100.0
@@ -63,5 +68,53 @@ class Settings(BaseSettings):
         from hyperliquid.utils import constants
         return constants.TESTNET_API_URL if self.testnet else constants.MAINNET_API_URL
 
+    @property
+    def active_private_key(self) -> str:
+        """Return testnet key when TESTNET=true and TEST_ key is set, else production key."""
+        if self.testnet and self.test_hyperliquid_private_key:
+            return self.test_hyperliquid_private_key
+        return self.hyperliquid_private_key
+
+    @property
+    def active_main_address(self) -> str:
+        """Return testnet main address when TESTNET=true and TEST_ address is set, else production."""
+        if self.testnet and self.test_hyperliquid_main_address:
+            return self.test_hyperliquid_main_address
+        return self.hyperliquid_main_address
+
 
 settings = Settings()
+
+
+_EMPTY_SPOT_META = {"tokens": [], "universe": []}
+
+
+def _safe_spot_meta():
+    """Fetch spot_meta, falling back to empty on testnet SDK bug."""
+    from hyperliquid.info import Info
+    try:
+        info = Info(settings.api_url, skip_ws=True)
+        return None  # SDK fetched it fine
+    except (IndexError, KeyError):
+        return _EMPTY_SPOT_META
+
+
+def make_info():
+    """Create hyperliquid Info instance, bypassing testnet spot_meta bug."""
+    from hyperliquid.info import Info
+    try:
+        return Info(settings.api_url, skip_ws=True)
+    except (IndexError, KeyError):
+        return Info(settings.api_url, skip_ws=True, spot_meta=_EMPTY_SPOT_META)
+
+
+def make_exchange(account, account_address=None):
+    """Create hyperliquid Exchange instance, bypassing testnet spot_meta bug."""
+    from hyperliquid.exchange import Exchange
+    try:
+        return Exchange(account, settings.api_url,
+                        account_address=account_address or settings.hyperliquid_main_address)
+    except (IndexError, KeyError):
+        return Exchange(account, settings.api_url,
+                        account_address=account_address or settings.hyperliquid_main_address,
+                        spot_meta=_EMPTY_SPOT_META)

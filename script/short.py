@@ -34,8 +34,8 @@ def run():
 
     if settings.dry_run:
         import eth_account
-        from hyperliquid.info import Info
-        info = Info(settings.api_url, skip_ws=True)
+        from src.config import make_info
+        info = make_info()
         mid = float(info.all_mids()[coin])
         sz_decimals = next((a["szDecimals"] for a in info.meta()["universe"] if a["name"] == coin), 3)
         qty = round(size_usd / mid, sz_decimals)
@@ -60,13 +60,11 @@ def run():
         return
 
     import eth_account
-    from hyperliquid.exchange import Exchange
-    from hyperliquid.info import Info
+    from src.config import make_info, make_exchange
 
     account = eth_account.Account.from_key(settings.hyperliquid_private_key)
-    info = Info(settings.api_url, skip_ws=True)
-    exchange = Exchange(account, settings.api_url,
-                        account_address=settings.hyperliquid_main_address)
+    info = make_info()
+    exchange = make_exchange(account)
 
     # Set leverage
     exchange.update_leverage(settings.leverage, coin, is_cross=True)

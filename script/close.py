@@ -33,12 +33,11 @@ def _close_hl_orphan() -> None:
         return
 
     import eth_account
-    from hyperliquid.exchange import Exchange
-    from hyperliquid.info import Info
+    from src.config import make_info, make_exchange
 
     account  = eth_account.Account.from_key(settings.hyperliquid_private_key)
-    info     = Info(settings.api_url, skip_ws=True)
-    exchange = Exchange(account, settings.api_url, account_address=settings.hyperliquid_main_address)
+    info     = make_info()
+    exchange = make_exchange(account)
 
     for attempt, slippage in enumerate([0.01, 0.03, 0.05], 1):
         result = exchange.market_close(coin, slippage=slippage)
@@ -65,8 +64,8 @@ def run():
             return
 
         if settings.dry_run:
-            from hyperliquid.info import Info
-            info = Info(settings.api_url, skip_ws=True)
+            from src.config import make_info
+            info = make_info()
             exit_price = float(info.all_mids()[trade.coin])
         else:
             from src.trader import _close_position

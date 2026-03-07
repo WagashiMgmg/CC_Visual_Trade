@@ -7,7 +7,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-from src.config import settings
+from src.config import settings, make_info, make_exchange
 from src.database import Trade, get_session
 from src.reflection import trigger_reflection
 
@@ -19,8 +19,7 @@ def get_user_fee_rate() -> float:
     Returns rate as decimal (e.g., 0.00035 for 0.035%).
     Falls back to settings.fee_rate_fallback on error."""
     try:
-        from hyperliquid.info import Info
-        info = Info(settings.api_url, skip_ws=True)
+        info = make_info()
         fee_data = info.user_fees(settings.hyperliquid_main_address)
         rate = float(fee_data.get("userCrossRate", settings.fee_rate_fallback))
         logger.info(f"User fee rate from API: {rate}")
@@ -34,8 +33,7 @@ def get_fill_fee(coin: str, oid: int | None = None) -> float | None:
     """Get fee from the most recent fill matching coin (and optionally oid).
     Returns fee in USD or None on error."""
     try:
-        from hyperliquid.info import Info
-        info = Info(settings.api_url, skip_ws=True)
+        info = make_info()
         fills = info.user_fills(settings.hyperliquid_main_address)
         for f in fills:
             if f.get("coin") == coin:
@@ -91,10 +89,8 @@ def get_live_position() -> dict | None:
             "entry_time": trade.entry_time,
         }
 
-    from hyperliquid.info import Info
-
     coin = settings.trading_coin
-    info = Info(settings.api_url, skip_ws=True)
+    info = make_info()
     hl_pos = _get_hl_position(info, coin)
 
     if hl_pos is None:
@@ -239,16 +235,10 @@ def _close_position(trade: Trade) -> float:
     Raises RuntimeError if position cannot be fully closed.
     """
     import eth_account
-    from hyperliquid.exchange import Exchange
-    from hyperliquid.info import Info
 
     account = eth_account.Account.from_key(settings.hyperliquid_private_key)
-    info = Info(settings.api_url, skip_ws=True)
-    exchange = Exchange(
-        account,
-        settings.api_url,
-        account_address=settings.hyperliquid_main_address,
-    )
+    info = make_info()
+    exchange = make_exchange(account)
 
     coin = trade.coin
     qty = trade.qty
@@ -343,10 +333,8 @@ def sync_position_state():
     if settings.dry_run:
         return
 
-    from hyperliquid.info import Info
-
     coin = settings.trading_coin
-    info = Info(settings.api_url, skip_ws=True)
+    info = make_info()
     hl_pos = _get_hl_position(info, coin)
 
     with get_session() as session:

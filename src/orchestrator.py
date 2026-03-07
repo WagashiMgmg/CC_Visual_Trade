@@ -108,8 +108,8 @@ REASON: （日本語で理由を記述。緊急トリガーに対する見解も
 
 def _fetch_mid(coin: str) -> float:
     """Fetch current mid price from Hyperliquid."""
-    from hyperliquid.info import Info
-    info = Info(settings.api_url, skip_ws=True)
+    from src.config import make_info
+    info = make_info()
     return float(info.all_mids()[coin])
 
 

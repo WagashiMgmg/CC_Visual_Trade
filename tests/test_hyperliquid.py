@@ -12,7 +12,7 @@ import eth_account
 from hyperliquid.exchange import Exchange
 from hyperliquid.info import Info
 
-from src.config import settings
+from src.config import settings, make_info, make_exchange
 
 # Guard: refuse to run against mainnet
 if not settings.testnet:
@@ -23,17 +23,13 @@ if not settings.testnet:
 
 @pytest.fixture(scope="module")
 def info():
-    return Info(settings.api_url, skip_ws=True)
+    return make_info()
 
 
 @pytest.fixture(scope="module")
 def exchange():
-    account = eth_account.Account.from_key(settings.hyperliquid_private_key)
-    return Exchange(
-        account,
-        settings.api_url,
-        account_address=settings.hyperliquid_main_address,
-    )
+    account = eth_account.Account.from_key(settings.active_private_key)
+    return make_exchange(account, account_address=settings.active_main_address)
 
 
 @pytest.fixture(scope="module")
@@ -113,6 +109,16 @@ class TestOrderPlacement:
         """Hyperliquidのtick sizeに合わせて整数に丸める"""
         return float(round(price))
 
+    @staticmethod
+    def _parse_statuses(result: dict) -> list:
+        """Parse statuses from order/cancel result, handling string response (wallet not found)."""
+        resp = result.get("response", {})
+        if isinstance(resp, str):
+            if "does not exist" in resp:
+                pytest.skip(f"テストネットウォレット未登録: {resp}")
+            pytest.fail(f"APIエラー: {resp}")
+        return resp.get("data", {}).get("statuses", [])
+
     def test_place_and_cancel_long(self, info, exchange, btc_mid, sz_decimals):
         """Longの指値注文を出して即キャンセルできるか（約定しない価格で）"""
         coin = settings.trading_coin
@@ -122,7 +128,7 @@ class TestOrderPlacement:
         print(f"\n  LONG limit: {coin} qty={qty} px={limit_px} (~${qty * btc_mid:.2f})")
 
         result = exchange.order(coin, True, qty, limit_px, {"limit": {"tif": "Gtc"}})
-        statuses = result.get("response", {}).get("data", {}).get("statuses", [])
+        statuses = self._parse_statuses(result)
         assert statuses, f"レスポンスにstatusがありません: {result}"
 
         status = statuses[0]
@@ -134,7 +140,7 @@ class TestOrderPlacement:
 
         # キャンセル
         cancel = exchange.cancel(coin, oid)
-        cancel_statuses = cancel.get("response", {}).get("data", {}).get("statuses", [])
+        cancel_statuses = self._parse_statuses(cancel)
         assert cancel_statuses and cancel_statuses[0] == "success", f"キャンセル失敗: {cancel}"
         print(f"  キャンセル成功")
 
@@ -147,7 +153,7 @@ class TestOrderPlacement:
         print(f"\n  SHORT limit: {coin} qty={qty} px={limit_px} (~${qty * btc_mid:.2f})")
 
         result = exchange.order(coin, False, qty, limit_px, {"limit": {"tif": "Gtc"}})
-        statuses = result.get("response", {}).get("data", {}).get("statuses", [])
+        statuses = self._parse_statuses(result)
         assert statuses, f"レスポンスにstatusがありません: {result}"
 
         status = statuses[0]
@@ -158,7 +164,7 @@ class TestOrderPlacement:
         print(f"  注文成功 oid={oid}")
 
         cancel = exchange.cancel(coin, oid)
-        cancel_statuses = cancel.get("response", {}).get("data", {}).get("statuses", [])
+        cancel_statuses = self._parse_statuses(cancel)
         assert cancel_statuses and cancel_statuses[0] == "success", f"キャンセル失敗: {cancel}"
         print(f"  キャンセル成功")
 
@@ -172,7 +178,7 @@ class TestOrderPlacement:
 
         # 成行エントリー
         open_result = exchange.market_open(coin, True, qty, slippage=0.01)
-        statuses = open_result.get("response", {}).get("data", {}).get("statuses", [])
+        statuses = self._parse_statuses(open_result)
         assert statuses and "filled" in statuses[0], f"成行エントリー失敗: {open_result}"
 
         entry_px = float(statuses[0]["filled"]["avgPx"])
@@ -182,7 +188,7 @@ class TestOrderPlacement:
         time.sleep(2)
 
         # ポジション確認
-        state = info.user_state(settings.hyperliquid_main_address.lower())
+        state = info.user_state(settings.active_main_address.lower())
         positions = state.get("assetPositions", [])
         pos = next((p["position"] for p in positions if p["position"]["coin"] == coin), None)
         print(f"  ポジション確認: {pos}")
@@ -202,7 +208,7 @@ class TestOrderPlacement:
             {"limit": {"tif": "Gtc"}},
             reduce_only=True,
         )
-        close_statuses = close_result.get("response", {}).get("data", {}).get("statuses", [])
+        close_statuses = self._parse_statuses(close_result)
         assert close_statuses, f"決済レスポンスなし: {close_result}"
         status = close_statuses[0]
         assert "error" not in status, f"決済注文エラー: {status.get('error')}"

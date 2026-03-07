@@ -24,8 +24,8 @@ _emergency_lock = threading.Lock()
 
 
 def _fetch_mid(coin: str) -> float:
-    from hyperliquid.info import Info
-    info = Info(settings.api_url, skip_ws=True)
+    from src.config import make_info
+    info = make_info()
     return float(info.all_mids()[coin])
 
 
