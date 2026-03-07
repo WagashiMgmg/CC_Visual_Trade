@@ -1,0 +1,66 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1a1a2e', 'primaryTextColor': '#e0e0e0', 'primaryBorderColor': '#e3b341', 'lineColor': '#58a6ff', 'secondaryColor': '#0d1117', 'tertiaryColor': '#161b22', 'fontFamily': 'monospace'}}}%%
+graph TB
+    subgraph Scheduler["APScheduler"]
+        TC["Trading Cycle<br/>(every 60min)"]
+        CC["Close Check<br/>(every 30sec)"]
+        DG["Digest<br/>(every 12h)"]
+    end
+
+    TC --> Chart["Chart Gen<br/>mplfinance<br/>8 TF PNGs"]
+    Chart --> MAGI
+
+    subgraph MAGI["MAGI System"]
+        direction LR
+        M["Melchior<br/>(Claude)"]
+        B["Balthazar<br/>(Gemini)"]
+        M --- Vote["Majority<br/>Vote"]
+        B --- Vote
+    end
+
+    subgraph Rounds["Voting Rounds"]
+        R0["Round 0: Independent"]
+        R1["Round 1: Cross-reference"]
+        R2["Round 2: Web Search"]
+        R3["Round 3: Final"]
+        R0 --> R1 --> R2 --> R3
+    end
+
+    MAGI -.-> Rounds
+
+    Vote --> LONG["LONG<br/>limit → market"]
+    Vote --> SHORT["SHORT<br/>limit → market"]
+    Vote --> HOLD["HOLD"]
+    Vote --> EXIT["EXIT"]
+
+    LONG --> DB[("SQLite<br/>Trade / Cycle<br/>MagiVote")]
+    SHORT --> DB
+    HOLD --> DB
+    EXIT --> DB
+
+    CC --> Trader["Trader<br/>Force Close"]
+    CC --> Emergency["Emergency<br/>Monitor"]
+    Emergency -->|"threshold<br/>breach"| MAGI
+
+    DB --> Reflect["Post-Trade<br/>Reflection"]
+    DB --> HoldRef["Hold<br/>Reflection"]
+    Reflect --> AGENTS["AGENTS.md<br/>Rule Update"]
+    HoldRef --> AGENTS
+    Reflect --> Hypo["Hypothesis<br/>Queue"]
+    HoldRef --> Hypo
+    Hypo -->|"2+ supports"| AGENTS
+
+    DG --> Digest["Reflection<br/>Digest"]
+    Digest -->|"inject into<br/>next prompt"| MAGI
+
+    DB --> Dashboard["Dashboard<br/>FastAPI + Jinja2<br/>:8080"]
+    Dashboard --> Notify["Discord<br/>Notification"]
+
+    style MAGI fill:#1a1a2e,stroke:#e3b341,stroke-width:2px
+    style Scheduler fill:#0d1117,stroke:#58a6ff,stroke-width:1px
+    style Rounds fill:#161b22,stroke:#484f58,stroke-width:1px
+    style DB fill:#1a1a2e,stroke:#58a6ff,stroke-width:2px
+    style AGENTS fill:#1a1a2e,stroke:#e3b341,stroke-width:2px
+    style LONG fill:#238636,stroke:#2ea043
+    style SHORT fill:#da3633,stroke:#f85149
+    style HOLD fill:#1a1a2e,stroke:#484f58
+    style EXIT fill:#1a1a2e,stroke:#484f58
