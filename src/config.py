@@ -45,7 +45,6 @@ class Settings(BaseSettings):
     hold_reflection_enabled: bool = True
     hold_reflection_window_hours: int = 4
     hold_reflection_min_pnl_multiplier: float = 3.0  # min hypothetical PnL as multiple of round-trip fees
-    hold_reflection_max_daily: int = 2
 
     # Fee
     fee_rate_fallback: float = 0.00045  # API取得失敗時のフォールバック (0.045% taker)

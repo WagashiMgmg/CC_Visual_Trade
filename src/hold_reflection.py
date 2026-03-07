@@ -241,19 +241,6 @@ rm -rf {archive_dir}
 """
 
 
-def _count_todays_reflections() -> int:
-    """Count hold reflections triggered today."""
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    with get_session() as session:
-        return (
-            session.query(HoldOpportunity)
-            .filter(
-                HoldOpportunity.status == "reflected",
-                HoldOpportunity.check_time >= today_start,
-            )
-            .count()
-        )
-
 
 def trigger_hold_reflection(opportunity_id: int) -> None:
     """Launch a Claude subprocess to perform missed-opportunity reflection."""
@@ -336,6 +323,11 @@ def check_pending_opportunities() -> None:
 
         logger.info(f"Checking {len(pending)} pending hold opportunities")
 
+        from src.trader import get_user_fee_rate
+        fee_rate = get_user_fee_rate()
+        round_trip_fee = settings.position_size_usd * fee_rate * 2
+        threshold = round_trip_fee * settings.hold_reflection_min_pnl_multiplier
+
         for opp in pending:
             try:
                 long_pnl, short_pnl, long_price, short_price = _calculate_mfe(
@@ -358,38 +350,26 @@ def check_pending_opportunities() -> None:
                 opp.max_favorable_direction = best_dir
                 opp.hypothetical_pnl = best_pnl
 
-                # Check threshold: min_pnl_multiplier * round_trip_fee
-                from src.trader import get_user_fee_rate
-                fee_rate = get_user_fee_rate()
-                round_trip_fee = settings.position_size_usd * fee_rate * 2
-                threshold = round_trip_fee * settings.hold_reflection_min_pnl_multiplier
-
                 if best_pnl >= threshold:
-                    # Check daily cap
-                    todays_count = _count_todays_reflections()
-                    if todays_count >= settings.hold_reflection_max_daily:
-                        opp.status = "skipped"
-                        logger.info(
-                            f"Hold opportunity {opp.id}: missed ${best_pnl:.2f} "
-                            f"but daily cap reached ({todays_count}/{settings.hold_reflection_max_daily})"
-                        )
-                    else:
-                        opp.status = "checked"
-                        session.commit()
-                        logger.info(
-                            f"Hold opportunity {opp.id}: missed ${best_pnl:.2f} ({best_dir}) "
-                            f"— triggering reflection"
-                        )
-                        trigger_hold_reflection(opp.id)
-                        continue  # status already updated in trigger_hold_reflection
+                    opp.status = "checked"
+                    session.commit()
+                    logger.info(
+                        f"Hold opportunity {opp.id}: missed ${best_pnl:.2f} ({best_dir}) "
+                        f"— triggering reflection"
+                    )
+                    trigger_hold_reflection(opp.id)
+                    continue  # status already updated in trigger_hold_reflection
                 else:
                     opp.status = "skipped"
+                    session.commit()
+                    # Clean up chart archive after commit
+                    if opp.chart_archive_dir:
+                        shutil.rmtree(opp.chart_archive_dir, ignore_errors=True)
+                        logger.info(f"Cleaned up charts: {opp.chart_archive_dir}")
                     logger.info(
                         f"Hold opportunity {opp.id}: best PnL ${best_pnl:.2f} "
-                        f"below threshold ${threshold:.2f} — skipping"
+                        f"below threshold ${threshold:.2f} — skipped"
                     )
-
-                session.commit()
             except Exception as e:
                 logger.error(f"Error checking hold opportunity {opp.id}: {e}")
                 session.commit()
