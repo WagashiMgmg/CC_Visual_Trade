@@ -89,6 +89,7 @@ class ClaudeAgent(MagiAgent):
                 [
                     "claude",
                     "-p", prompt,
+                    "--model", "claude-sonnet-4-6",
                     "--allowedTools", allowed_tools,
                     "--permission-mode", "bypassPermissions",
                 ],
@@ -664,6 +665,7 @@ class MagiSystem:
                 [
                     "claude",
                     "-p", prompt,
+                    "--model", "claude-sonnet-4-6",
                     "--allowedTools", "",
                     "--permission-mode", "bypassPermissions",
                 ],
