@@ -17,6 +17,43 @@ AGENTS_MD = "/app/AGENTS.md"
 CHARTS_DIR = "/app/charts"
 REFLECTIONS_DIR = "/app/data/reflections"
 
+# Shared consistency-check instruction injected after AGENTS.md rule updates
+RULE_CONSISTENCY_CHECK = """
+**ルール整合性チェック（必須）:**
+ステップ4で更新した後、以下の手順で全ルールの論理整合性を検証してください。
+
+1. `/app/AGENTS.md` を再度Readし、`<h2>学習済みルール</h2>` と `<h2>エントリー推奨条件</h2>` の全ルールをPython風擬似コードに変換してください。以下のフォーマットで記述:
+
+```python
+def check_rules(signal, market) -> (bool, str):
+    # 学習済みルール1: (ルール名)
+    if signal == "LONG":
+        if (条件):
+            return False, "Rule1: ..."
+    # ... 全ルール
+
+def check_entry_signals(market) -> str | None:
+    # Entry1: (条件名)
+    if (条件の組み合わせ):
+        return "SHORT"
+    # ... 全エントリー推奨条件
+```
+
+2. 擬似コードを見て以下をチェック:
+   - **自己矛盾**: 同一スナップショットで同時に満たせない条件の組み合わせ（例: `rsi >= 70 and rsi < 65`）。時系列イベント（「一度X超→その後Y未満に下落」）をスナップショット条件と混同していないか
+   - **相互矛盾**: 学習済みルールがエントリー推奨条件を常にブロックしてしまう組み合わせ（例: Rule1がEntry3を常に阻止）
+   - **冗長**: 学習済みルールとエントリー推奨条件で同じチェックを二重に行っている
+   - **到達不能**: 前段の条件により絶対に到達しないエントリー推奨条件
+
+3. 矛盾・問題が見つかった場合、`/app/AGENTS.md` をEditツールで即座に修正してください:
+   - スナップショット矛盾 → 時系列条件に書き換え（例: `RSI≥70後に＜65転換` のように状態遷移を明記）
+   - 常時ブロック → ルール側に例外追加、またはエントリー条件の前提を修正
+   - 冗長 → エントリー推奨条件側の重複チェックを削除（学習済みルールに任せる）
+   - 到達不能 → 条件を修正するか、エントリー推奨条件を削除
+
+4. 修正した場合、振り返りファイルの末尾に `### 整合性チェック修正` セクションを追記し、何を修正したか記録してください。
+"""
+
 
 def archive_charts(trade_id: int, coin: str) -> str | None:
     """
@@ -190,7 +227,7 @@ ls {archive_dir}
 - LOSSの場合もエントリー推奨条件には「このシグナルが揃っていればWINだった可能性がある」仮説的ポジティブ条件を1件記録すること
 - `<h2>エントリー推奨条件</h2>` セクションが存在しない場合は `<ol></ol>` ごと新規作成すること
 - 今回のトレード判断で参照・適用したルールの `<small class="rule-stat">適用N / WINN</small>` 数値を更新すること（適用: 常に+1、WIN時はさらにWIN: +1）
-
+{RULE_CONSISTENCY_CHECK}
 ステップ5: 今回の振り返りで「このインジケーターがあれば」「この機能を追加したい」などコーディング改善リクエストがあれば、Bashツールで以下のコマンドを実行してGitHub Issueを作成してください。なければスキップ。
 ```bash
 gh issue create \

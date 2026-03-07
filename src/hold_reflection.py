@@ -16,6 +16,7 @@ import requests
 
 from src.config import settings
 from src.database import Cycle, HoldOpportunity, MagiVote, get_session
+from src.reflection import RULE_CONSISTENCY_CHECK
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +233,7 @@ ls /app/charts/{coin}_*.png
 - 見逃し機会の分析結果に基づき、エントリー推奨条件に新しい条件を追加するか、既存条件を更新すること
 - 学習済みルールに過度な抑制があった場合は例外条件を追加するか、ルールを緩和すること
 - `<small class="rule-stat">適用N / WINN</small>` の更新は不要（HOLDは実トレードではないため）
-
+{RULE_CONSISTENCY_CHECK}
 ステップ6: 以下のコマンドでアーカイブディレクトリを削除してください:
 ```bash
 rm -rf {archive_dir}
