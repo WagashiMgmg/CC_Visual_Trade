@@ -131,6 +131,10 @@ def run():
         logger.error("Failed to fill order — aborting.")
         sys.exit(1)
 
+    # Get entry fee from fill
+    from src.trader import get_fill_fee
+    entry_fee = get_fill_fee(coin, oid)
+
     with get_session() as session:
         trade = Trade(
             coin=coin,
@@ -142,13 +146,14 @@ def run():
             entry_time=datetime.utcnow(),
             status="open",
             cycle_id=cycle_id,
+            entry_fee=entry_fee,
         )
         session.add(trade)
         session.commit()
         trade_id = trade.id
 
     archive_charts(trade_id, coin)
-    print(f"LONG executed: entry_price={entry_price} qty={qty} order_id={oid} trade_id={trade_id}")
+    print(f"LONG executed: entry_price={entry_price} qty={qty} order_id={oid} trade_id={trade_id} fee={entry_fee}")
     logger.info(f"Trade recorded: id={trade_id}")
 
 

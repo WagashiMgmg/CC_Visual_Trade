@@ -592,8 +592,9 @@ body {
 .mono    { font-family: "SFMono-Regular", Consolas, monospace; }
 .small   { font-size: 12px; }
 .muted   { color: var(--muted); }
-.text-green { color: var(--green); }
-.text-red   { color: var(--red); }
+.text-green  { color: var(--green); }
+.text-red    { color: var(--red); }
+.text-yellow { color: #f0ad4e; }
 
 /* ── Cycles page ──────────────────────────────────────────────── */
 .cycles-summary-card { margin-bottom: 10px; padding: 12px 16px; }

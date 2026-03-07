@@ -31,6 +31,8 @@ class Trade(Base):
     exit_time = Column(DateTime, nullable=True)
     exit_order_id = Column(Integer, nullable=True)
     pnl_usd = Column(Float, nullable=True)
+    entry_fee = Column(Float, nullable=True)   # Entry fill fee (USD)
+    exit_fee = Column(Float, nullable=True)    # Exit fill fee (USD)
     status = Column(String(20), default="open")  # 'open' | 'closed' | 'error'
     created_at = Column(DateTime, default=datetime.utcnow)
     cycle_id = Column(Integer, ForeignKey("cycles.id"), nullable=True)
@@ -107,6 +109,10 @@ with engine.connect() as conn:
     cols = [row[1] for row in conn.execute(text("PRAGMA table_info(trades)"))]
     if "cycle_id" not in cols:
         conn.execute(text("ALTER TABLE trades ADD COLUMN cycle_id INTEGER REFERENCES cycles(id)"))
+    if "entry_fee" not in cols:
+        conn.execute(text("ALTER TABLE trades ADD COLUMN entry_fee REAL"))
+    if "exit_fee" not in cols:
+        conn.execute(text("ALTER TABLE trades ADD COLUMN exit_fee REAL"))
     cols_cycles = [row[1] for row in conn.execute(text("PRAGMA table_info(cycles)"))]
     if "mid_price" not in cols_cycles:
         conn.execute(text("ALTER TABLE cycles ADD COLUMN mid_price REAL"))

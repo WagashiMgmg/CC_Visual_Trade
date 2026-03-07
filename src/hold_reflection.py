@@ -71,8 +71,10 @@ def _calculate_mfe(coin: str, hold_time: datetime, hold_price: float, window_hou
     best_long_price = max(highs) if highs else hold_price
     best_short_price = min(lows) if lows else hold_price
 
+    from src.trader import get_user_fee_rate
     size = settings.position_size_usd
-    round_trip_fee = size * 0.001 * 2  # 0.1% each way
+    fee_rate = get_user_fee_rate()
+    round_trip_fee = size * fee_rate * 2
 
     best_long_pnl = (best_long_price - hold_price) / hold_price * size - round_trip_fee
     best_short_pnl = (hold_price - best_short_price) / hold_price * size - round_trip_fee
@@ -356,7 +358,9 @@ def check_pending_opportunities() -> None:
                 opp.hypothetical_pnl = best_pnl
 
                 # Check threshold: min_pnl_multiplier * round_trip_fee
-                round_trip_fee = settings.position_size_usd * 0.001 * 2
+                from src.trader import get_user_fee_rate
+                fee_rate = get_user_fee_rate()
+                round_trip_fee = settings.position_size_usd * fee_rate * 2
                 threshold = round_trip_fee * settings.hold_reflection_min_pnl_multiplier
 
                 if best_pnl >= threshold:

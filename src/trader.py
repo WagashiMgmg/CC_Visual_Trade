@@ -14,6 +14,40 @@ from src.reflection import trigger_reflection
 logger = logging.getLogger(__name__)
 
 
+def get_user_fee_rate() -> float:
+    """Fetch user's current taker fee rate from Hyperliquid API.
+    Returns rate as decimal (e.g., 0.00035 for 0.035%).
+    Falls back to settings.fee_rate_fallback on error."""
+    try:
+        from hyperliquid.info import Info
+        info = Info(settings.api_url, skip_ws=True)
+        fee_data = info.user_fees(settings.hyperliquid_main_address)
+        rate = float(fee_data.get("userCrossRate", settings.fee_rate_fallback))
+        logger.info(f"User fee rate from API: {rate}")
+        return rate
+    except Exception as e:
+        logger.warning(f"Failed to fetch user fee rate, using fallback: {e}")
+        return settings.fee_rate_fallback
+
+
+def get_fill_fee(coin: str, oid: int | None = None) -> float | None:
+    """Get fee from the most recent fill matching coin (and optionally oid).
+    Returns fee in USD or None on error."""
+    try:
+        from hyperliquid.info import Info
+        info = Info(settings.api_url, skip_ws=True)
+        fills = info.user_fills(settings.hyperliquid_main_address)
+        for f in fills:
+            if f.get("coin") == coin:
+                if oid is not None and f.get("oid") != oid:
+                    continue
+                return abs(float(f.get("fee", 0)))
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to get fill fee: {e}")
+        return None
+
+
 def calc_pnl(side: str, entry_price: float, exit_price: float, size_usd: float) -> float:
     """Calculate P&L in USD for a closed position."""
     if side == "long":
@@ -132,6 +166,9 @@ def close_expired_positions():
                 else:
                     exit_price = _close_position(trade)
                     pnl = calc_pnl(trade.side, trade.entry_price, exit_price, trade.size_usd)
+                    # Record exit fee
+                    exit_fee = get_fill_fee(trade.coin)
+                    trade.exit_fee = exit_fee
 
                 exit_time = datetime.utcnow()
                 trade.exit_price = exit_price

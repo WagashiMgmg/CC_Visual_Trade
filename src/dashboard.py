@@ -20,6 +20,13 @@ templates = Jinja2Templates(directory="/app/templates")
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+def _calc_trade_fee(t) -> float:
+    """Calculate total fee for a trade. Uses actual fees if available, otherwise estimates."""
+    if t.entry_fee is not None and t.exit_fee is not None:
+        return t.entry_fee + t.exit_fee
+    return (t.size_usd or 0) * settings.fee_rate_fallback * 2
+
+
 def _get_stats():
     with get_session() as session:
         closed = session.query(Trade).filter(Trade.status == "closed").all()
@@ -27,11 +34,17 @@ def _get_stats():
         wins = sum(1 for t in closed if (t.pnl_usd or 0) > 0)
         total_pnl = sum(t.pnl_usd or 0 for t in closed)
         win_rate = round(wins / total * 100, 1) if total else 0
+        net_total_pnl = sum((t.pnl_usd or 0) - _calc_trade_fee(t) for t in closed)
+        net_wins = sum(1 for t in closed if (t.pnl_usd or 0) - _calc_trade_fee(t) > 0)
+        net_win_rate = round(net_wins / total * 100, 1) if total else 0
         return {
             "total_trades": total,
             "wins": wins,
             "win_rate": win_rate,
             "total_pnl": round(total_pnl, 2),
+            "net_total_pnl": round(net_total_pnl, 2),
+            "net_wins": net_wins,
+            "net_win_rate": net_win_rate,
         }
 
 
@@ -157,6 +170,9 @@ def _get_recent_trades(limit=20):
             duration = ""
             if t.exit_time and t.entry_time:
                 duration = str(t.exit_time - t.entry_time).split(".")[0]
+            fee = _calc_trade_fee(t) if t.status == "closed" else None
+            net_pnl = (t.pnl_usd or 0) - fee if fee is not None and t.pnl_usd is not None else None
+            fee_estimated = t.entry_fee is None or t.exit_fee is None
             result.append({
                 "id": t.id,
                 "coin": t.coin,
@@ -166,6 +182,9 @@ def _get_recent_trades(limit=20):
                 "entry_price": t.entry_price,
                 "exit_price": t.exit_price,
                 "pnl_usd": t.pnl_usd,
+                "net_pnl": round(net_pnl, 2) if net_pnl is not None else None,
+                "fee": round(fee, 4) if fee is not None else None,
+                "fee_estimated": fee_estimated,
                 "status": t.status,
                 "entry_time": t.entry_time.strftime("%m/%d %H:%M") if t.entry_time else "",
                 "duration": duration,

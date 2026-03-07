@@ -19,6 +19,7 @@
           <th>Size USD</th>
           <th>Duration</th>
           <th>P&L</th>
+          <th>Net P&L</th>
           <th>Status</th>
         </tr>
       </thead>
@@ -41,6 +42,12 @@
           <td class="mono {% if t.pnl_usd and t.pnl_usd >= 0 %}text-green{% elif t.pnl_usd %}text-red{% endif %}">
             {% if t.pnl_usd is not none %}
               {% if t.pnl_usd >= 0 %}+{% endif %}${{ "{:,.2f}".format(t.pnl_usd) }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="mono {% if t.net_pnl is not none %}{% if t.pnl_usd and t.pnl_usd > 0 and t.net_pnl < 0 %}text-yellow{% elif t.net_pnl >= 0 %}text-green{% else %}text-red{% endif %}{% endif %}">
+            {% if t.net_pnl is not none %}
+              {% if t.net_pnl >= 0 %}+{% endif %}${{ "{:,.2f}".format(t.net_pnl) }}
+              <small class="muted">fee ${{ "{:,.4f}".format(t.fee) }}{% if t.fee_estimated %}*{% endif %}</small>
             {% else %}—{% endif %}
           </td>
           <td>

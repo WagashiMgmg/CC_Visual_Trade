@@ -68,9 +68,21 @@
       </span>
     </div>
     <div class="stat-row">
-      <span class="label">Total P&L</span>
+      <span class="label">Gross P&L</span>
       <span class="value {% if stats.total_pnl >= 0 %}text-green{% else %}text-red{% endif %}">
         {% if stats.total_pnl >= 0 %}+{% endif %}${{ "{:,.2f}".format(stats.total_pnl) }}
+      </span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Net P&L</span>
+      <span class="value {% if stats.net_total_pnl >= 0 %}text-green{% else %}text-red{% endif %}">
+        {% if stats.net_total_pnl >= 0 %}+{% endif %}${{ "{:,.2f}".format(stats.net_total_pnl) }}
+      </span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Net Win Rate</span>
+      <span class="value {% if stats.net_win_rate >= 50 %}text-green{% else %}text-red{% endif %}">
+        {{ stats.net_win_rate }}%
       </span>
     </div>
   </div>
