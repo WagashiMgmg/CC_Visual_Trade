@@ -13,6 +13,13 @@
 </div>
 {% endif %}
 
+{% if hypotheses %}
+<details class="card" style="margin-bottom:20px; border-left:3px solid var(--yellow);" open>
+  <summary style="padding:16px; cursor:pointer; font-weight:600;">Unresolved Hypotheses</summary>
+  <div class="reflection-body" style="padding:0 16px 16px">{{ hypotheses | safe }}</div>
+</details>
+{% endif %}
+
 {% if not reflections %}
 <div class="card">
   <p class="muted" style="padding:16px">No reflections yet.</p>

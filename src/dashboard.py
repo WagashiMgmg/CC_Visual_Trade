@@ -637,11 +637,30 @@ def _get_digest():
         return None
 
 
+def _get_hypotheses():
+    import markdown as md
+    hypo_path = Path("/app/data/reflections/hypotheses.md")
+    if not hypo_path.exists():
+        return None
+    try:
+        text = hypo_path.read_text().strip()
+        if not text or text == "# 未解決の仮説":
+            return None
+        return md.markdown(text, extensions=["fenced_code", "tables"])
+    except Exception:
+        return None
+
+
 @router.get("/reflections", response_class=HTMLResponse)
 async def reflections_page(request: Request):
     return templates.TemplateResponse(
         "reflections.html",
-        {"request": request, "digest": _get_digest(), "reflections": _get_reflections()},
+        {
+            "request": request,
+            "digest": _get_digest(),
+            "hypotheses": _get_hypotheses(),
+            "reflections": _get_reflections(),
+        },
     )
 
 
