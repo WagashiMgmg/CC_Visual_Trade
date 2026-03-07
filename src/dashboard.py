@@ -21,10 +21,11 @@ templates = Jinja2Templates(directory="/app/templates")
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _calc_trade_fee(t) -> float:
-    """Calculate total fee for a trade. Uses actual fees if available, otherwise estimates."""
-    if t.entry_fee is not None and t.exit_fee is not None:
-        return t.entry_fee + t.exit_fee
-    return (t.size_usd or 0) * settings.fee_rate_fallback * 2
+    """Calculate total fee for a trade. Uses actual fees where available, fallback otherwise."""
+    fallback = (t.size_usd or 0) * settings.fee_rate_fallback
+    entry = t.entry_fee if t.entry_fee is not None else fallback
+    exit_f = t.exit_fee if t.exit_fee is not None else fallback
+    return entry + exit_f
 
 
 def _get_stats():

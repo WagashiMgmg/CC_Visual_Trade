@@ -82,6 +82,9 @@ def run():
         trade.exit_time = exit_time
         trade.pnl_usd = round(pnl, 4)
         trade.status = "closed"
+        if not settings.dry_run:
+            from src.trader import get_fill_fee
+            trade.exit_fee = get_fill_fee(trade.coin)
         session.commit()
 
         trade_info = {
