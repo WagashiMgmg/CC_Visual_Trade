@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import matplotlib
 import matplotlib.pyplot as plt
 import mplfinance as mpf
+import numpy as np
 import pandas as pd
 import requests
 
@@ -49,6 +50,15 @@ def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
     loss = (-delta.clip(upper=0)).rolling(period).mean()
     rs = gain / loss
     return 100 - (100 / (1 + rs))
+
+
+def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """Average True Range."""
+    high_low = df["High"] - df["Low"]
+    high_close = (df["High"] - df["Close"].shift()).abs()
+    low_close = (df["Low"] - df["Close"].shift()).abs()
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    return tr.rolling(period).mean()
 
 
 def fetch_candles(coin: str, interval: str, count: int) -> pd.DataFrame:
@@ -110,6 +120,58 @@ def _sma_cross_markers(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     return gc_markers, dc_markers
 
 
+def _draw_vrvp(ax, df, num_bins: int = 40) -> None:
+    """Draw Volume Range Visible Profile as horizontal bars on the price chart."""
+    price_min = df["Low"].min()
+    price_max = df["High"].max()
+    if price_max <= price_min:
+        return
+
+    bins = np.linspace(price_min, price_max, num_bins + 1)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_height = bins[1] - bins[0]
+    vol_up = np.zeros(num_bins)
+    vol_down = np.zeros(num_bins)
+
+    for _, row in df.iterrows():
+        is_up = row["Close"] >= row["Open"]
+        for i in range(num_bins):
+            overlap = min(row["High"], bins[i + 1]) - max(row["Low"], bins[i])
+            if overlap > 0:
+                rng = row["High"] - row["Low"]
+                prop = overlap / rng if rng > 0 else 1.0
+                v = row["Volume"] * prop
+                if is_up:
+                    vol_up[i] += v
+                else:
+                    vol_down[i] += v
+
+    total = vol_up + vol_down
+    max_v = total.max()
+    if max_v <= 0:
+        return
+
+    scale = len(df) * 0.15 / max_v
+    poc_idx = np.argmax(total)
+
+    for i in range(num_bins):
+        w_d = vol_down[i] * scale
+        w_u = vol_up[i] * scale
+        w = w_d + w_u
+        left = len(df) - w
+        a = 0.6 if i == poc_idx else 0.25
+        if w_d > 0:
+            ax.barh(bin_centers[i], w_d, height=bin_height * 0.85,
+                    left=left, color="#f85149", alpha=a, zorder=0.5)
+        if w_u > 0:
+            ax.barh(bin_centers[i], w_u, height=bin_height * 0.85,
+                    left=left + w_d, color="#3fb950", alpha=a, zorder=0.5)
+
+    # POC line
+    ax.axhline(y=bin_centers[poc_idx], color="#e3b341", linestyle="--",
+               linewidth=1.0, alpha=0.7, zorder=0.5)
+
+
 def _plot_chart(
     df: pd.DataFrame, coin: str, title: str, out_path: str,
     entry_price: float | None = None, entry_time: datetime | None = None, side: str | None = None,
@@ -118,6 +180,7 @@ def _plot_chart(
     df["SMA20"] = df["Close"].rolling(20).mean()
     df["SMA50"] = df["Close"].rolling(50).mean()
     df["RSI"]   = _rsi(df["Close"], 14)
+    df["ATR"]   = _atr(df, 14)
 
     gc_markers, dc_markers = _sma_cross_markers(df)
 
@@ -147,6 +210,8 @@ def _plot_chart(
                          ylabel="RSI", ylim=(0, 100)),
         mpf.make_addplot([70] * len(df), panel=2, color="#f85149", linestyle="--", width=0.8),
         mpf.make_addplot([30] * len(df), panel=2, color="#3fb950", linestyle="--", width=0.8),
+        mpf.make_addplot(df["ATR"], panel=3, color="#e3b341", width=1.2,
+                         ylabel="ATR(14)"),
     ]
 
     style = mpf.make_mpf_style(
@@ -160,16 +225,21 @@ def _plot_chart(
         df, type="candle", style=style,
         title=f"\n{title}",
         volume=True, addplot=add_plots,
-        panel_ratios=(3, 1, 1), figsize=(16, 10),
+        panel_ratios=(4, 1, 1, 1), figsize=(16, 12),
         returnfig=True, tight_layout=True,
     )
 
     ax = axes[0]
 
+    # VRVP (Volume Range Visible Profile)
+    try:
+        _draw_vrvp(ax, df)
+    except Exception as e:
+        logger.warning(f"VRVP drawing failed: {e}")
+
     # Embed emoji behind candlesticks using AnnotationBbox (zorder < candle zorder ~3)
     if df["SMA50"].notna().any():
         try:
-            import numpy as np
             from PIL import Image as PILImage, ImageDraw, ImageFont
             from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 
@@ -217,6 +287,8 @@ def _plot_chart(
                    linestyle="none", label="GC (Golden Cross)"),
         plt.Line2D([0], [0], marker="v", color="#f85149", markersize=10,
                    linestyle="none", label="DC (Dead Cross)"),
+        plt.Line2D([0], [0], color="#e3b341", linestyle="--", linewidth=1,
+                   label="POC (VRVP)"),
     ]
     if entry_in_range:
         side_label = "Long" if side == "long" else "Short"
@@ -248,18 +320,25 @@ def _cleanup_old_charts(coin: str) -> None:
 
 def _cross_freshness(df: pd.DataFrame, interval: str) -> dict:
     """Extract GC/DC freshness info: bars since last cross, minutes, current SMA state, RSI."""
-    result: dict = {"interval": interval, "sma_state": "neutral", "rsi": None}
+    result: dict = {"interval": interval, "sma_state": "neutral", "rsi": None, "atr": None}
 
     # Current RSI
     rsi_val = df["RSI"].iloc[-1]
     if not pd.isna(rsi_val):
         result["rsi"] = round(rsi_val, 1)
 
-    # SMA state
+    # Current ATR
+    atr_val = df["ATR"].iloc[-1]
+    if not pd.isna(atr_val):
+        result["atr"] = round(atr_val, 2)
+
+    # SMA state & spread
     sma20 = df["SMA20"].iloc[-1]
     sma50 = df["SMA50"].iloc[-1]
     if not pd.isna(sma20) and not pd.isna(sma50):
         result["sma_state"] = "GC" if sma20 > sma50 else "DC"
+        if sma50 != 0:
+            result["sma_spread"] = round((sma20 - sma50) / sma50 * 100, 3)
 
     # Find last GC/DC
     gc_markers, dc_markers = _sma_cross_markers(df)
@@ -289,6 +368,10 @@ def format_cross_freshness(freshness_list: list[dict]) -> str:
         parts = [f"**{f['interval']}**: SMA状態={f['sma_state']}"]
         if f.get("rsi") is not None:
             parts.append(f"RSI={f['rsi']}")
+        if f.get("atr") is not None:
+            parts.append(f"ATR={f['atr']}")
+        if f.get("sma_spread") is not None:
+            parts.append(f"SMAスプレッド={f['sma_spread']}%")
         if "last_gc" in f:
             gc = f["last_gc"]
             parts.append(f"最終GC={gc['bars_ago']}本前({gc['minutes_ago']}分前)")
@@ -327,7 +410,7 @@ def generate_multi_tf_charts(
                 logger.warning(f"Not enough data for {interval} ({len(df)} candles), skipping")
                 continue
             out_path = f"/app/charts/{coin}_{interval}_{ts}.png"
-            title = f"{coin}/USD  {label}  |  SMA20 (orange) SMA50 (blue) RSI (purple)"
+            title = f"{coin}/USD  {label}  |  SMA20 SMA50 RSI ATR VRVP"
             _plot_chart(df, coin, title, out_path,
                         entry_price=entry_price, entry_time=entry_time, side=side)
             logger.info(f"Chart saved: {out_path}")

@@ -14,5 +14,10 @@ Each chart shows:
 - **Candlesticks** (OHLCV)
 - **SMA20** (orange) — short-term trend
 - **SMA50** (blue) — medium-term trend
-- **RSI** (purple, lower panel) — overbought >70, oversold <30
+- **VRVP** (right side of price panel) — Volume Range Visible Profile. Green=bullish volume, Red=bearish volume. The highlighted row is the **POC (Point of Control)** = highest-volume price level (yellow dashed line). POC acts as strong support/resistance; high-volume nodes attract price, low-volume nodes let price pass quickly.
 - **Volume** (middle panel)
+- **RSI** (purple, lower panel) — overbought >70, oversold <30
+- **ATR(14)** (yellow, bottom panel) — Average True Range. Measures volatility in price units. Use to assess whether expected move covers fees and to gauge current volatility regime.
+
+## Technical Summary (auto-generated, included in prompt)
+Per-timeframe numeric values: SMA state, RSI, ATR, **SMA Spread (%)** = (SMA20−SMA50)/SMA50×100. Spread near 0% = SMA convergence = momentum exhaustion. Use with ATR to detect low-conviction ranging conditions.
