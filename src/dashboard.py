@@ -511,8 +511,9 @@ def _get_magi_analytics():
                         if (trade.pnl_usd or 0) > 0:
                             agent_wins[a] += 1
 
-            # Response time (round 0)
-            if cycle.timestamp:
+            # Response time (round 0) — only from 2026-03-05 19:00 UTC onward
+            _RESP_TIME_CUTOFF = datetime(2026, 3, 5, 19, 0)
+            if cycle.timestamp and cycle.timestamp >= _RESP_TIME_CUTOFF:
                 label = cycle.timestamp.strftime("%m/%d %H:%M")
                 resp_labels.append(label)
                 for a in agents:
