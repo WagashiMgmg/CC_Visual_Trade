@@ -53,6 +53,7 @@ class Cycle(Base):
     skip_reason = Column(String(200), nullable=True)
     claude_raw_output = Column(Text, nullable=True)
     mid_price = Column(Float, nullable=True)
+    target_price = Column(Float, nullable=True)  # Profit target price set at entry (LONG/SHORT)
 
 
 class MagiVote(Base):
@@ -145,6 +146,8 @@ with engine.connect() as conn:
     cols_cycles = [row[1] for row in conn.execute(text("PRAGMA table_info(cycles)"))]
     if "mid_price" not in cols_cycles:
         conn.execute(text("ALTER TABLE cycles ADD COLUMN mid_price REAL"))
+    if "target_price" not in cols_cycles:
+        conn.execute(text("ALTER TABLE cycles ADD COLUMN target_price REAL"))
 
 
 @contextmanager

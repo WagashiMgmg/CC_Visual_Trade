@@ -51,6 +51,7 @@ _PROMPT_IN_POSITION = """\
 
 ## エントリー時の判断（{entry_time_str}）
 - 決定: {entry_decision}
+- 利確目標: {entry_target}
 - 根拠: {entry_reasoning}
 
 ## 現在のポジション状況
@@ -85,6 +86,7 @@ _PROMPT_EMERGENCY = """\
 
 ## エントリー時の判断（{entry_time_str}）
 - 決定: {entry_decision}
+- 利確目標: {entry_target}
 - 根拠: {entry_reasoning}
 
 ## 現在のポジション状況
@@ -199,6 +201,7 @@ def run_cycle(
         entry_decision = ""
         entry_reasoning = "（エントリー理由の記録なし）"
         entry_time_str = ""
+        entry_target = "（記録なし）"
         trade_id = live_position.get("trade_id")
         if trade_id:
             with get_session() as session:
@@ -212,6 +215,8 @@ def run_cycle(
                             entry_cycle.timestamp.strftime("%Y-%m-%d %H:%M UTC")
                             if entry_cycle.timestamp else ""
                         )
+                        if entry_cycle.target_price:
+                            entry_target = f"${entry_cycle.target_price:,.2f}"
 
         prompt_vars = dict(
             context=context,
@@ -227,6 +232,7 @@ def run_cycle(
             entry_decision=entry_decision,
             entry_reasoning=entry_reasoning,
             entry_time_str=entry_time_str,
+            entry_target=entry_target,
         )
 
         if emergency:
@@ -333,6 +339,18 @@ def run_cycle(
         logger.warning(f"Failed to fetch mid price for cycle record: {e}")
         mid_price = None
 
+    # Extract target_price from votes (Melchior's target preferred; else median)
+    entry_target_price = None
+    if decision in ("LONG", "SHORT"):
+        targets = [
+            v["target_price"]
+            for v in magi_result["votes"].values()
+            if v.get("target_price") is not None
+        ]
+        if targets:
+            melchior_target = magi_result["votes"].get("melchior", {}).get("target_price")
+            entry_target_price = melchior_target if melchior_target else sorted(targets)[len(targets) // 2]
+
     # Update Cycle record
     with get_session() as session:
         cycle = session.query(Cycle).filter(Cycle.id == cycle_id).first()
@@ -341,6 +359,7 @@ def run_cycle(
             cycle.ai_reasoning = reasoning
             cycle.action_taken = decision.lower()
             cycle.mid_price    = mid_price
+            cycle.target_price = entry_target_price
             # Store summary of all votes as raw output
             votes_summary = "\n\n".join(
                 f"=== {name.upper()} ===\n{v.get('raw_output', '')[:1000]}"

@@ -27,19 +27,27 @@ from src.database import MagiVote, get_session
 logger = logging.getLogger(__name__)
 
 _DECISION_RE = re.compile(r"\*{0,2}DECISION:?\*{0,2}:?\s*(LONG|SHORT|HOLD|EXIT)", re.IGNORECASE)
+_TARGET_RE   = re.compile(r"\bTARGET:?\s*\$?\s*([\d,]+(?:\.\d+)?)", re.IGNORECASE)
 _REASON_RE   = re.compile(r"\*{0,2}REASON\**:?\s*\**\s*\n*(.+)", re.DOTALL)
 
 
 def _parse_vote(output: str) -> dict:
     decision = "HOLD"
     reasoning = ""
+    target_price = None
     m = _DECISION_RE.search(output)
     if m:
         decision = m.group(1).upper()
+    t = _TARGET_RE.search(output)
+    if t:
+        try:
+            target_price = float(t.group(1).replace(",", ""))
+        except ValueError:
+            pass
     r = _REASON_RE.search(output)
     if r:
         reasoning = r.group(1).strip()
-    return {"decision": decision, "reasoning": reasoning, "raw_output": output}
+    return {"decision": decision, "reasoning": reasoning, "raw_output": output, "target_price": target_price}
 
 
 # ── Base agent ────────────────────────────────────────────────────────────────
@@ -388,6 +396,7 @@ class MagiSystem:
             f"チャートファイル:\n{chart_list}\n\n"
             f"最後に必ず以下のフォーマットで出力してください:\n"
             f"DECISION: LONG or SHORT or HOLD\n"
+            f"TARGET: $xxxxx.xx（LONG/SHORTの場合のみ: 利確目標価格。HOLDは省略可）\n"
             f"REASON: （日本語で理由を記述）"
         )
         return {"default": prompt}
@@ -414,6 +423,7 @@ class MagiSystem:
             for name, v in prev_votes.items()
         )
         decision_fmt = "EXIT or HOLD" if in_position else "LONG or SHORT or HOLD"
+        target_line = "" if in_position else "TARGET: $xxxxx.xx（LONG/SHORTの場合のみ: 利確目標価格。HOLDは省略可）\n"
         chart_list = "\n".join(f"- {p}" for p in charts)
         prompts = {}
         for agent in self._active_agents():
@@ -426,6 +436,7 @@ class MagiSystem:
                 f"チャートファイル:\n{chart_list}\n\n"
                 f"最後に必ず以下のフォーマットで出力してください:\n"
                 f"DECISION: {decision_fmt}\n"
+                f"{target_line}"
                 f"REASON: （日本語で理由を記述）"
             )
             prompts[agent.name] = prompt
@@ -440,6 +451,7 @@ class MagiSystem:
             for name, v in prev_votes.items()
         )
         decision_fmt = "EXIT or HOLD" if in_position else "LONG or SHORT or HOLD"
+        target_line = "" if in_position else "TARGET: $xxxxx.xx（LONG/SHORTの場合のみ: 利確目標価格。HOLDは省略可）\n"
         chart_list = "\n".join(f"- {p}" for p in charts)
         prompts = {}
         tools = {}
@@ -455,6 +467,7 @@ class MagiSystem:
                 f"チャートファイル:\n{chart_list}\n\n"
                 f"最後に必ず以下のフォーマットで出力してください:\n"
                 f"DECISION: {decision_fmt}\n"
+                f"{target_line}"
                 f"REASON: （日本語で理由を記述）"
             )
             prompts[agent.name] = base
@@ -472,6 +485,7 @@ class MagiSystem:
     ) -> dict[str, str]:
         """Round 3: compare vs Melchior reasoning."""
         decision_fmt = "EXIT or HOLD" if in_position else "LONG or SHORT or HOLD"
+        target_line = "" if in_position else "TARGET: $xxxxx.xx（LONG/SHORTの場合のみ: 利確目標価格。HOLDは省略可）\n"
         chart_list = "\n".join(f"- {p}" for p in charts)
         melchior_summary = (
             f"Melchior判断: {melchior_vote.get('decision', 'HOLD')}\n"
@@ -491,6 +505,7 @@ class MagiSystem:
                 f"チャートファイル:\n{chart_list}\n\n"
                 f"最後に必ず以下のフォーマットで出力してください:\n"
                 f"DECISION: {decision_fmt}\n"
+                f"{target_line}"
                 f"REASON: （日本語で理由を記述）"
             )
             prompts[agent.name] = prompt
