@@ -20,6 +20,7 @@ import subprocess
 import tempfile
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime
 
 from src.database import MagiVote, get_session
@@ -50,6 +51,15 @@ def _parse_vote(output: str) -> dict:
     return {"decision": decision, "reasoning": reasoning, "raw_output": output, "target_price": target_price}
 
 
+# ── AgentResult ───────────────────────────────────────────────────────────────
+
+@dataclass
+class AgentResult:
+    """Universal result from any MagiAgent execution."""
+    stdout: str
+    agent_name: str
+
+
 # ── Base agent ────────────────────────────────────────────────────────────────
 
 class MagiAgent:
@@ -57,8 +67,28 @@ class MagiAgent:
     display: str
     available: bool = True
 
-    def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
+    def execute(self, prompt: str, *,
+                allowed_tools: str = "",
+                timeout: int = 600) -> AgentResult | None:
+        """Execute a prompt. Returns AgentResult on success, None on failure."""
         raise NotImplementedError
+
+    def check_available(self) -> bool:
+        """Check if this agent is currently available (dynamic check)."""
+        raise NotImplementedError
+
+    def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
+        """MAGI voting: execute prompt and parse for DECISION/REASON.
+
+        Subclasses may override for agent-specific behavior (e.g. chart @ syntax).
+        """
+        result = self.execute(prompt, allowed_tools=allowed_tools, timeout=600)
+        if result is None:
+            return None
+        if not _DECISION_RE.search(result.stdout):
+            logger.warning(f"[{self.display}] no explicit DECISION in output — abstaining")
+            return None
+        return _parse_vote(result.stdout)
 
     def _save_vote(self, cycle_id: int, round_num: int, vote: dict, timestamp: datetime | None = None):
         with get_session() as session:
@@ -79,8 +109,9 @@ class MagiAgent:
 class ClaudeAgent(MagiAgent):
     name    = "melchior"
     display = "Melchior"
+    _MODEL  = "claude-sonnet-4-6"
 
-    def _check_available_quota(self) -> bool:
+    def check_available(self) -> bool:
         """Return True if claude CLI is reachable."""
         try:
             result = subprocess.run(
@@ -91,46 +122,50 @@ class ClaudeAgent(MagiAgent):
         except Exception:
             return False
 
-    def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
+    def execute(self, prompt: str, *,
+                allowed_tools: str = "",
+                timeout: int = 600) -> AgentResult | None:
         try:
+            cmd = [
+                "claude", "-p", prompt,
+                "--model", self._MODEL,
+                "--permission-mode", "bypassPermissions",
+            ]
+            if allowed_tools:
+                cmd += ["--allowedTools", allowed_tools]
+            env = os.environ.copy()
+            env.pop("CLAUDECODE", None)
             result = subprocess.run(
-                [
-                    "claude",
-                    "-p", prompt,
-                    "--model", "claude-sonnet-4-6",
-                    "--allowedTools", allowed_tools,
-                    "--permission-mode", "bypassPermissions",
-                ],
+                cmd,
                 capture_output=True,
                 text=True,
-                timeout=600,
+                timeout=timeout,
                 cwd="/app",
-                env=os.environ.copy(),
+                env=env,
             )
             if result.returncode != 0:
                 logger.error(
-                    f"[Melchior] non-zero exit ({result.returncode}) — marking OFFLINE"
+                    f"[{self.display}] non-zero exit ({result.returncode}) — marking OFFLINE"
                     f"\n  stderr: {result.stderr[:400]}"
                     f"\n  stdout: {result.stdout[:200]}"
                 )
                 self.available = False
                 return None
-            if not _DECISION_RE.search(result.stdout):
-                logger.warning("[Melchior] no explicit DECISION in output — abstaining")
-                return None
-            return _parse_vote(result.stdout)
+            return AgentResult(stdout=result.stdout, agent_name=self.name)
         except subprocess.TimeoutExpired:
-            logger.error("[Melchior] timed out — marking OFFLINE")
+            logger.error(f"[{self.display}] timed out — marking OFFLINE")
             self.available = False
             return None
         except FileNotFoundError:
-            logger.error("[Melchior] claude CLI not found — marking OFFLINE")
+            logger.error(f"[{self.display}] claude CLI not found — marking OFFLINE")
             self.available = False
             return None
         except Exception as e:
-            logger.error(f"[Melchior] error: {e} — marking OFFLINE")
+            logger.error(f"[{self.display}] error: {e} — marking OFFLINE")
             self.available = False
             return None
+
+    # analyze() inherited from MagiAgent base class
 
 
 # ── Balthazar (Gemini CLI) ────────────────────────────────────────────────────
@@ -139,10 +174,10 @@ class GeminiAgent(MagiAgent):
     name    = "balthazar"
     display = "Balthazar"
 
-    # Model fallback order: default (flash) → flash-lite → pro
+    # Model fallback order
     _MODEL_FALLBACK = ["gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
 
-    def _check_available_quota(self) -> bool:
+    def check_available(self) -> bool:
         """Return True if at least one model has quota remaining."""
         for model in self._MODEL_FALLBACK:
             _, quota_exceeded = self._run_gemini("ping", model)
@@ -150,14 +185,40 @@ class GeminiAgent(MagiAgent):
                 return True
         return False
 
-    def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
-        # Re-check availability each cycle (quota may have reset)
+    def execute(self, prompt: str, *,
+                allowed_tools: str = "",
+                timeout: int = 600) -> AgentResult | None:
+        """Execute prompt through Gemini model fallback chain.
+
+        allowed_tools is ignored (Gemini CLI has no tool support).
+        """
         if not self.available:
-            if not self._check_available_quota():
-                logger.info("[Balthazar] still OFFLINE — abstaining")
+            if not self.check_available():
+                logger.info(f"[{self.display}] still OFFLINE — skipping")
                 return None
             self.available = True
-            logger.info("[Balthazar] quota restored, back ONLINE")
+            logger.info(f"[{self.display}] quota restored, back ONLINE")
+
+        for model in self._MODEL_FALLBACK:
+            output, quota_exceeded = self._run_gemini(prompt, model, timeout=timeout)
+            if output is not None:
+                return AgentResult(stdout=output, agent_name=self.name)
+            if not quota_exceeded:
+                break  # Non-quota error, stop trying
+            logger.warning(f"[{self.display}] quota exceeded on {model}, trying next model")
+
+        logger.error(f"[{self.display}] all models exhausted — marking OFFLINE")
+        self.available = False
+        return None
+
+    def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
+        """Override: append chart @ syntax and handle text-only retry for voting."""
+        if not self.available:
+            if not self.check_available():
+                logger.info(f"[{self.display}] still OFFLINE — abstaining")
+                return None
+            self.available = True
+            logger.info(f"[{self.display}] quota restored, back ONLINE")
         chart_refs = " ".join(f"@{p}" for p in charts)
         full_prompt = f"{prompt}\n\nCharts: {chart_refs}" if charts else prompt
 
@@ -165,29 +226,28 @@ class GeminiAgent(MagiAgent):
             output, quota_exceeded = self._run_gemini(full_prompt, model)
             if output is not None:
                 if not _DECISION_RE.search(output):
-                    logger.warning(f"[Balthazar] no explicit DECISION in output ({model}) — abstaining")
+                    logger.warning(f"[{self.display}] no explicit DECISION in output ({model}) — abstaining")
                     return None
                 return _parse_vote(output)
             if not quota_exceeded:
                 # Non-quota error (@ syntax, etc.) — retry text-only once
-                logger.warning("[Balthazar] @ syntax failed, retrying text-only")
+                logger.warning(f"[{self.display}] @ syntax failed, retrying text-only")
                 output, quota_exceeded = self._run_gemini(prompt, model)
                 if output is not None:
                     if not _DECISION_RE.search(output):
-                        logger.warning("[Balthazar] no explicit DECISION in text-only retry — abstaining")
+                        logger.warning(f"[{self.display}] no explicit DECISION in text-only retry — abstaining")
                         return None
                     return _parse_vote(output)
                 if not quota_exceeded:
                     break  # Non-quota failure, skip remaining models
-            label = model or "default"
-            logger.warning(f"[Balthazar] quota exceeded on {label}, trying next model")
+            logger.warning(f"[{self.display}] quota exceeded on {model}, trying next model")
 
-        # All models exhausted → abstain (return None, not counted in majority)
-        logger.error("[Balthazar] all models quota-exceeded — marking OFFLINE")
+        logger.error(f"[{self.display}] all models quota-exceeded — marking OFFLINE")
         self.available = False
         return None
 
-    def _run_gemini(self, prompt: str, model: str | None = None) -> tuple[str | None, bool]:
+    def _run_gemini(self, prompt: str, model: str | None = None,
+                    timeout: int = 600) -> tuple[str | None, bool]:
         """
         Run gemini CLI with optional model override.
         Returns (output, quota_exceeded).
@@ -202,7 +262,7 @@ class GeminiAgent(MagiAgent):
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=600,
+                timeout=timeout,
                 cwd="/app",
                 env=os.environ.copy(),
             )
@@ -210,18 +270,18 @@ class GeminiAgent(MagiAgent):
                 stderr = result.stderr
                 if "TerminalQuotaError" in stderr or "exhausted your capacity" in stderr:
                     return None, True
-                logger.warning(f"[Balthazar] non-zero exit ({model or 'default'}): {stderr[:200]}")
+                logger.warning(f"[{self.display}] non-zero exit ({model or 'default'}): {stderr[:200]}")
                 return None, False
             return result.stdout, False
         except subprocess.TimeoutExpired:
-            logger.error(f"[Balthazar] timed out ({model or 'default'})")
+            logger.error(f"[{self.display}] timed out ({model or 'default'})")
             return None, False
         except FileNotFoundError:
-            logger.warning("[Balthazar] gemini CLI not found — marking unavailable")
+            logger.warning(f"[{self.display}] gemini CLI not found — marking unavailable")
             self.available = False
             return None, False
         except Exception as e:
-            logger.error(f"[Balthazar] error ({model or 'default'}): {e}")
+            logger.error(f"[{self.display}] error ({model or 'default'}): {e}")
             return None, False
 
 
@@ -246,58 +306,63 @@ class CasparAgent(MagiAgent):
     # Claude Haiku モデルID（一時的な代替）
     _HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
-    def analyze(self, prompt: str, charts: list[str], allowed_tools: str = "Read") -> dict | None:
-        if self._BACKEND == "codex":
-            # TODO(codex): Codex CLI が利用可能になったら実装する
-            return self._run_codex(prompt, charts)
-        return self._run_claude_haiku(prompt, charts, allowed_tools)
-
-    def _run_claude_haiku(self, prompt: str, charts: list[str], allowed_tools: str) -> dict | None:
-        """一時的な代替: Claude Haiku を claude CLI の --model で呼び出す。"""
+    def check_available(self) -> bool:
+        """Return True if claude CLI is reachable."""
         try:
             result = subprocess.run(
-                [
-                    "claude",
-                    "-p", prompt,
-                    "--model", self._HAIKU_MODEL,
-                    "--allowedTools", allowed_tools,
-                    "--permission-mode", "bypassPermissions",
-                ],
+                ["claude", "--version"],
+                capture_output=True, timeout=15,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    def execute(self, prompt: str, *,
+                allowed_tools: str = "",
+                timeout: int = 300) -> AgentResult | None:
+        if self._BACKEND == "codex":
+            raise NotImplementedError("Codex CLI 未実装")
+        try:
+            cmd = [
+                "claude", "-p", prompt,
+                "--model", self._HAIKU_MODEL,
+                "--permission-mode", "bypassPermissions",
+            ]
+            if allowed_tools:
+                cmd += ["--allowedTools", allowed_tools]
+            env = os.environ.copy()
+            env.pop("CLAUDECODE", None)
+            result = subprocess.run(
+                cmd,
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=timeout,
                 cwd="/app",
-                env=os.environ.copy(),
+                env=env,
             )
             if result.returncode != 0:
                 logger.error(
-                    f"[Caspar/Haiku] non-zero exit ({result.returncode}) — marking OFFLINE"
+                    f"[{self.display}/Haiku] non-zero exit ({result.returncode}) — marking OFFLINE"
                     f"\n  stderr: {result.stderr[:400]}"
                     f"\n  stdout: {result.stdout[:200]}"
                 )
                 self.available = False
                 return None
-            if not _DECISION_RE.search(result.stdout):
-                logger.warning("[Caspar/Haiku] no explicit DECISION in output — abstaining")
-                return None
-            return _parse_vote(result.stdout)
+            return AgentResult(stdout=result.stdout, agent_name=self.name)
         except subprocess.TimeoutExpired:
-            logger.error("[Caspar/Haiku] timed out — marking OFFLINE")
+            logger.error(f"[{self.display}/Haiku] timed out — marking OFFLINE")
             self.available = False
             return None
         except FileNotFoundError:
-            logger.error("[Caspar/Haiku] claude CLI not found — marking OFFLINE")
+            logger.error(f"[{self.display}/Haiku] claude CLI not found — marking OFFLINE")
             self.available = False
             return None
         except Exception as e:
-            logger.error(f"[Caspar/Haiku] error: {e} — marking OFFLINE")
+            logger.error(f"[{self.display}/Haiku] error: {e} — marking OFFLINE")
             self.available = False
             return None
 
-    def _run_codex(self, prompt: str, charts: list[str]) -> dict | None:
-        """TODO(codex): Codex CLI 実装。_BACKEND = "codex" に切り替え後に完成させる。"""
-        # 例: subprocess.run(["codex", "-p", prompt, ...], ...)
-        raise NotImplementedError("Codex CLI 未実装")
+    # analyze() inherited from MagiAgent base class
 
 
 # ── MagiSystem ────────────────────────────────────────────────────────────────
@@ -533,8 +598,8 @@ class MagiSystem:
         """
         # ── Revive inactive agents (quota may have reset) ────────────────────
         for agent in self.agents:
-            if not agent.available and hasattr(agent, "_check_available_quota"):
-                if agent._check_available_quota():
+            if not agent.available:
+                if agent.check_available():
                     agent.available = True
                     logger.info(f"[MAGI] {agent.display} quota restored, back ONLINE")
 
@@ -640,17 +705,25 @@ class MagiSystem:
         decision: str,
         votes: dict[str, dict],
     ) -> str:
-        """Have Melchior synthesize a unified reasoning from all anonymous votes.
+        """Synthesize a unified reasoning from all anonymous votes.
 
-        Agents are anonymized (Agent A/B/C) to prevent Melchior from
-        favouring its own prior opinion.  The output summarises pro and
-        con arguments for the decided direction.
+        Uses run_with_fallback to try agents in order: melchior → balthazar → caspar.
+        Falls back to simple text concatenation if all agents fail.
         """
-        # Anonymize agent names
+        prompt = self._build_synthesis_prompt(decision, votes)
+
+        result = run_with_fallback(self.agents, prompt, timeout=120)
+        if result:
+            return result.stdout.strip()[:2000]
+
+        # Fallback: simple concatenation of anonymous votes
+        return self._fallback_synthesis(decision, votes)
+
+    def _build_synthesis_prompt(self, decision: str, votes: dict[str, dict]) -> str:
+        """Build the synthesis prompt with anonymized agent names."""
         agent_names = sorted(votes.keys())
         anon_map = {name: f"Agent {chr(65 + i)}" for i, name in enumerate(agent_names)}
 
-        # Build anonymous vote summaries
         vote_lines = []
         for name in agent_names:
             v = votes[name]
@@ -661,7 +734,7 @@ class MagiSystem:
             )
         votes_text = "\n".join(vote_lines)
 
-        prompt = (
+        return (
             f"あなたはMAGIシステムの議事録係です。\n"
             f"以下の審議結果を統合し、簡潔な日本語のサマリーを作成してください。\n\n"
             f"## 審議結果\n"
@@ -675,34 +748,47 @@ class MagiSystem:
             f"【反対意見】決定方向に反対した意見の根拠サマリー（該当があれば2-3文、なければ「全員一致」）\n"
         )
 
-        try:
-            result = subprocess.run(
-                [
-                    "claude",
-                    "-p", prompt,
-                    "--model", "claude-sonnet-4-6",
-                    "--allowedTools", "",
-                    "--permission-mode", "bypassPermissions",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=120,
-                cwd="/app",
-                env=os.environ.copy(),
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                return result.stdout.strip()[:2000]
-            logger.warning(
-                f"[MAGI] synthesize_reasoning failed (rc={result.returncode})"
-                f"\n  stderr: {result.stderr[:400]}"
-            )
-        except Exception as e:
-            logger.error(f"[MAGI] synthesize_reasoning error: {e}")
-
-        # Fallback: simple concatenation of anonymous votes
+    def _fallback_synthesis(self, decision: str, votes: dict[str, dict]) -> str:
+        """Simple text concatenation when all agents fail."""
+        agent_names = sorted(votes.keys())
+        anon_map = {name: f"Agent {chr(65 + i)}" for i, name in enumerate(agent_names)}
         fallback_lines = []
         for name in agent_names:
             v = votes[name]
             anon = anon_map[name]
-            fallback_lines.append(f"{anon}({v['decision']}): {v.get('reasoning', '')[:200]}")
+            fallback_lines.append(f"{anon}({v['decision']}): {v.get('reasoning', '')[:400]}")
         return f"【決定】{decision}\n" + "\n".join(fallback_lines)
+
+
+# ── Fallback chain ────────────────────────────────────────────────────────────
+
+def run_with_fallback(
+    agents: list[MagiAgent],
+    prompt: str | Callable[[MagiAgent], str],
+    *,
+    allowed_tools: str | Callable[[MagiAgent], str] = "",
+    timeout: int = 600,
+) -> AgentResult | None:
+    """Try agents in order, return the first successful result.
+
+    Args:
+        agents: Ordered list of agents to try.
+        prompt: Static string or callable(agent) -> str for agent-specific prompts.
+        allowed_tools: Static string or callable(agent) -> str for agent-specific tools.
+        timeout: Subprocess timeout in seconds.
+
+    Returns:
+        AgentResult on first success, None if all agents fail.
+    """
+    for agent in agents:
+        if not agent.available and not agent.check_available():
+            logger.info(f"[Fallback] {agent.display} unavailable, skipping")
+            continue
+        p = prompt(agent) if callable(prompt) else prompt
+        t = allowed_tools(agent) if callable(allowed_tools) else allowed_tools
+        result = agent.execute(p, allowed_tools=t, timeout=timeout)
+        if result is not None:
+            logger.info(f"[Fallback] {agent.display} succeeded")
+            return result
+        logger.warning(f"[Fallback] {agent.display} failed, trying next agent")
+    return None

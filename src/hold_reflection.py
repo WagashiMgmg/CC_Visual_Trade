@@ -9,7 +9,6 @@ If so, triggers a Claude subprocess reflection to learn from the missed opportun
 import logging
 import os
 import shutil
-import subprocess
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -247,16 +246,12 @@ rule.htmlを変更した場合、以下のコマンドで必ずコミット＆�
 git add prompt/rule.html && git commit -m "reflect: Hold {opp_id} — rule.html update" && git push
 ```
 
-ステップ6: 以下のコマンドでアーカイブディレクトリを削除してください:
-```bash
-rm -rf {archive_dir}
-```
 """
 
 
 
 def trigger_hold_reflection(opportunity_id: int, round_trip_fee: float | None = None) -> None:
-    """Launch a Claude subprocess to perform missed-opportunity reflection."""
+    """Launch reflection with agent fallback chain for missed opportunity."""
     with get_session() as session:
         opp = session.query(HoldOpportunity).filter(HoldOpportunity.id == opportunity_id).first()
         if not opp:
@@ -286,31 +281,30 @@ def trigger_hold_reflection(opportunity_id: int, round_trip_fee: float | None = 
     cycle_info = _lookup_hold_cycle(opp_dict["cycle_id"])
     prompt = _build_hold_reflection_prompt(opp_dict, cycle_info, round_trip_fee)
 
-    try:
-        env = os.environ.copy()
-        env.pop("CLAUDECODE", None)
-        subprocess.Popen(
-            [
-                "claude", "-p", prompt,
-                "--allowedTools", "Read,Write,Edit,Bash",
-                "--permission-mode", "bypassPermissions",
-            ],
-            cwd="/app",
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
-            env=env,
-        )
-        logger.info(f"Launched hold reflection subprocess for opportunity_id={opportunity_id}")
+    chart_paths = [
+        f"{archive_dir}/{f}" for f in os.listdir(archive_dir) if f.endswith(".png")
+    ] if os.path.isdir(archive_dir) else []
 
+    def db_update_fn(status: str):
         with get_session() as session:
             opp = session.query(HoldOpportunity).filter(HoldOpportunity.id == opportunity_id).first()
             if opp:
-                opp.status = "reflected"
-                opp.reflection_path = f"{REFLECTIONS_DIR}/hold_{opportunity_id}.md"
+                opp.status = status
+                if status == "reflected":
+                    opp.reflection_path = f"{REFLECTIONS_DIR}/hold_{opportunity_id}.md"
                 session.commit()
-    except Exception as e:
-        logger.error(f"Failed to launch hold reflection subprocess: {e}")
+
+    from src.reflection_executor import execute_reflection
+    execute_reflection(
+        reflection_type="hold",
+        identifier=f"hold_{opportunity_id}",
+        claude_prompt=prompt,
+        expected_reflection_path=f"{REFLECTIONS_DIR}/hold_{opportunity_id}.md",
+        archive_dir=archive_dir,
+        trade_data=opp_dict,
+        chart_paths=chart_paths,
+        db_update_fn=db_update_fn,
+    )
 
 
 def check_pending_opportunities() -> None:

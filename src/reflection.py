@@ -9,7 +9,6 @@ and update the ## 学習済みルール section of /app/prompt/rule.html.
 import logging
 import os
 import shutil
-import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -301,16 +300,12 @@ high / medium / low" \
   --label "enhancement"
 ```
 
-ステップ7: 以下のコマンドでアーカイブディレクトリを削除してください:
-```bash
-rm -rf {archive_dir}
-```
 """
 
 
 def trigger_reflection(trade_info: dict) -> None:
     """
-    Launch a Claude subprocess asynchronously to perform post-trade reflection.
+    Launch reflection with agent fallback chain.
 
     trade_info must contain:
         archive_dir, trade_id, coin, side, entry_price,
@@ -328,23 +323,18 @@ def trigger_reflection(trade_info: dict) -> None:
     round_trip_fee = get_round_trip_fee()
     prompt = _build_reflection_prompt(trade_info, cycle_info, round_trip_fee)
 
-    try:
-        env = os.environ.copy()
-        env.pop("CLAUDECODE", None)  # Allow nested claude launch from within a claude session
-        subprocess.Popen(
-            [
-                "claude", "-p", prompt,
-                "--allowedTools", "Read,Write,Edit,Bash",
-                "--permission-mode", "bypassPermissions",
-            ],
-            cwd="/app",
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
-            env=env,
-        )
-        logger.info(
-            f"Launched reflection subprocess for trade_id={trade_info.get('trade_id')}"
-        )
-    except Exception as e:
-        logger.error(f"Failed to launch reflection subprocess: {e}")
+    trade_id = trade_info.get("trade_id", "?")
+    chart_paths = [
+        f"{archive_dir}/{f}" for f in os.listdir(archive_dir) if f.endswith(".png")
+    ] if os.path.isdir(archive_dir) else []
+
+    from src.reflection_executor import execute_reflection
+    execute_reflection(
+        reflection_type="trade",
+        identifier=f"trade_{trade_id}",
+        claude_prompt=prompt,
+        expected_reflection_path=f"{REFLECTIONS_DIR}/trade_{trade_id}.md",
+        archive_dir=archive_dir,
+        trade_data=trade_info,
+        chart_paths=chart_paths,
+    )

@@ -131,6 +131,15 @@ def digest_curation():
         logger.error(f"Digest curation failed: {e}")
 
 
+def reflection_retry():
+    """Retry failed reflections (runs every 30 minutes)."""
+    from src.reflection_executor import retry_pending_reflections
+    try:
+        retry_pending_reflections()
+    except Exception as e:
+        logger.error(f"Reflection retry failed: {e}")
+
+
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
 scheduler = BackgroundScheduler(timezone="UTC")
@@ -183,6 +192,15 @@ async def lifespan(app: FastAPI):
         IntervalTrigger(minutes=30),
         id="early_exit_check",
         name="Early Exit Analysis",
+        max_instances=1,
+        coalesce=True,
+    )
+    # Reflection retry every 30 minutes
+    scheduler.add_job(
+        reflection_retry,
+        IntervalTrigger(minutes=30),
+        id="reflection_retry",
+        name="Reflection Retry",
         max_instances=1,
         coalesce=True,
     )

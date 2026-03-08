@@ -11,7 +11,6 @@ we trigger a Claude subprocess reflection to improve EXIT rules.
 import logging
 import os
 import shutil
-import subprocess
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -279,15 +278,11 @@ git add prompt/rule.html && git commit -m "reflect: EarlyExit {opp_id} — rule.
 - 各仮説には: タイトル、初出Opportunity ID、支持/否定カウント、内容、検証条件を記載
 - 最大10件を維持。超過時は支持0かつ古いものから削除
 
-ステップ6: 以下のコマンドでアーカイブディレクトリを削除してください:
-```bash
-rm -rf {archive_dir}
-```
 """
 
 
 def trigger_early_exit_reflection(opp_id: int, round_trip_fee: float | None = None) -> None:
-    """Launch a Claude subprocess to perform early-exit reflection."""
+    """Launch reflection with agent fallback chain for early exit."""
     with get_session() as session:
         opp = (
             session.query(EarlyExitOpportunity)
@@ -325,25 +320,11 @@ def trigger_early_exit_reflection(opp_id: int, round_trip_fee: float | None = No
         round_trip_fee = get_round_trip_fee()
     prompt = _build_early_exit_prompt(opp_dict, round_trip_fee)
 
-    try:
-        env = os.environ.copy()
-        env.pop("CLAUDECODE", None)
-        subprocess.Popen(
-            [
-                "claude", "-p", prompt,
-                "--allowedTools", "Read,Write,Edit,Bash",
-                "--permission-mode", "bypassPermissions",
-            ],
-            cwd="/app",
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True,
-            env=env,
-        )
-        logger.info(
-            f"Launched early exit reflection subprocess for opportunity_id={opp_id}"
-        )
+    chart_paths = [
+        f"{archive_dir}/{f}" for f in os.listdir(archive_dir) if f.endswith(".png")
+    ] if os.path.isdir(archive_dir) else []
 
+    def db_update_fn(status: str):
         with get_session() as session:
             opp = (
                 session.query(EarlyExitOpportunity)
@@ -351,12 +332,22 @@ def trigger_early_exit_reflection(opp_id: int, round_trip_fee: float | None = No
                 .first()
             )
             if opp:
-                opp.status = "reflected"
-                opp.reflection_path = f"{REFLECTIONS_DIR}/early_exit_{opp_id}.md"
+                opp.status = status
+                if status == "reflected":
+                    opp.reflection_path = f"{REFLECTIONS_DIR}/early_exit_{opp_id}.md"
                 session.commit()
 
-    except Exception as e:
-        logger.error(f"Failed to launch early exit reflection subprocess: {e}")
+    from src.reflection_executor import execute_reflection
+    execute_reflection(
+        reflection_type="early_exit",
+        identifier=f"early_exit_{opp_id}",
+        claude_prompt=prompt,
+        expected_reflection_path=f"{REFLECTIONS_DIR}/early_exit_{opp_id}.md",
+        archive_dir=archive_dir,
+        trade_data=opp_dict,
+        chart_paths=chart_paths,
+        db_update_fn=db_update_fn,
+    )
 
 
 def check_pending_early_exits() -> None:
