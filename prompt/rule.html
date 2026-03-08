@@ -42,8 +42,8 @@
   <li><strong>回復乗り遅れ禁止</strong>: 急落回復60%超進行時、追いかけロング禁止。 <small class="rule-stat">適用1 / WIN0</small></li>
   <li><strong>フィー耐性</strong>: 期待利益が往復フィーの2倍以上必要。 <small class="rule-stat">適用0 / WIN0</small></li>
   <li><strong>シグナル鮮度</strong>: GC/DCは発生から2本以内のみ有効なシグナル。2本超経過時はSMA位置関係（SMA20 vs SMA50）を直接参照してトレンド判定する。<span class="rule-exception">例外: 日足以上は直近5本まで許容。</span><span class="rule-source">出典: Lo et al. (2000). Journal of Finance, 55(4), 1705-1765.</span> <small class="rule-stat">適用2 / WIN1</small></li>
-  <li><strong>ショート安全チェック</strong>: 【最初に確認: 月足GC＋6足全DC→④（1h RSI≤20禁止）のみ維持・その他全免除（下位足RSI過売れ制約含む）、直近安値まで往復フィー以上の余地あればショート可】通常: ①急騰後フィー再検証 ②水平コンソリ3h超→禁止 ③直近安値余地確認 ④1h RSI≤20禁止・20-35→目標50%縮小 ⑤下位足RSI&lt;20複数→最厳50%縮小。往復フィー未達ならHOLD。<span class="rule-exception">例外: ②30m/1h足でDCが継続・下向き中は15m/5mコンソリ禁止を免除。②重大ネガティブカタリスト時も禁止解除。</span><span class="rule-source">出典: Wilder (1978). / Bulkowski (2021). "Encyclopedia of Chart Patterns."</span> <small class="rule-stat">適用5 / WIN4</small></li>
-  <li><strong>週足RSI過売れ時の利益圧縮</strong>: 【最初に確認: 月足GC＋週足・日足・1h・30m・15m・5m全DC→このルール免除（週足RSI≤25かつ1h RSI≤20同時の場合はルール5④でブロック）】通常: 週足RSI25-30→65%縮小、≤25→50%縮小。ルール5と重複時は最厳1条件のみ。圧縮後の期待利益が往復フィー未達ならHOLD。 <small class="rule-stat">適用6 / WIN3</small></li>
+  <li><strong>ショート安全チェック</strong>: [月足GC+6足全DC→④のみ有効・他全免除] 通常: ①急騰後フィー再検証 ②水平コンソリ3h超→禁止 ③安値余地確認 ④1h RSI≤20禁止・20-35目標50%縮小 ⑤下位足RSI&lt;20複数→50%縮小。往復フィー未達HOLD。<span class="rule-exception">例外: ②30m/1h足DC継続中は5m/15mコンソリ禁止を免除。②重大ネガティブカタリスト時も禁止解除。</span><span class="rule-source">出典: Wilder (1978). / Bulkowski (2021). "Encyclopedia of Chart Patterns."</span> <small class="rule-stat">適用5 / WIN4</small></li>
+  <li><strong>週足RSI過売れ時の利益圧縮</strong>: [月足GC+全6足DC→免除] 週足RSI25-30→65%縮小、≤25→50%縮小。Rule5と重複時は最厳1条件のみ。圧縮後往復フィー未達HOLD。 <small class="rule-stat">適用6 / WIN3</small></li>
 </ol>
 
 <h2>エントリー推奨条件</h2>
@@ -53,7 +53,8 @@
   <li><strong>5m DC＋RSIサイクルショート</strong>: 三足DC＋日足SMA20レジで、5m DC中に5m RSI60→50以下転換→10分以内に執行。 <small class="rule-stat">適用0 / WIN0</small></li>
   <li><strong>ダブルGC＋週足過売れ回復ロング</strong>: 週足RSI25-35回復中、30m非DC＋15m GC＋5m GC（10分内）＋1h GC維持→ロング。 <small class="rule-stat">適用1 / WIN0</small></li>
   <li><strong>1h GC急落バウンスロング</strong>: 日足/週足のいずれかがGCまたはDC未形成の状態で、1h GC維持＋日中急落2%超＋1m/5m RSI同時≤25→平均回帰ロング。フィー再検証必須。<span class="rule-source">出典: Miwa (2018). SSRN 3174484. / Bremer &amp; Sweeney (1991). JF, 46(2), 747-754.</span> <small class="rule-stat">適用0 / WIN0</small></li>
-  <li><strong>マルチTF DC収束ショート</strong>: 日足DC＋週足DC必須。日足RSI≥65禁止。6足＝週足・日足・1h・30m・15m・5m。<strong>判断フロー（最初に確認）:</strong> [CaseA] 月足GC＋6足全DC収束→ルール5の④（1h RSI≤20禁止）のみ維持・その他全免除（下位足RSI過売れ制約・他Entry条件のRSI条件も不問）、ルール6免除、直近安値まで往復フィー以上の余地あればショート可。[CaseB] 月足GC＋6足未収束→直近安値まで往復フィー以上の余地あればショート可（1m RSI≤65推奨）。[CaseC] 月足DC→5m RSI≤65でショート可。<span class="rule-source">出典: Hill, A. SSRN 3412429. / Brock et al. (1992). JF, 47(5), 1731-1764. / Moskowitz et al. (2012). JFE, 104(2), 228-250.</span> <small class="rule-stat">適用8 / WIN4</small></li>
+  <li><strong>マルチTF DC収束ショート</strong>: 日足DC+週足DC必須。日足RSI≥65禁止。6足=週足/日足/1h/30m/15m/5m。[CaseA]月足GC+全6DC→Rule5④のみ有効・他免除、安値余地ありショート可。[CaseB]月足GC+未収束→1m RSI≤65推奨・安値余地ありショート可。[CaseC]月足DC→5m RSI≤65でショート可。<span class="rule-source">出典: Hill, A. SSRN 3412429. / Brock et al. (1992). JF, 47(5), 1731-1764. / Moskowitz et al. (2012). JFE, 104(2), 228-250.</span> <small class="rule-stat">適用8 / WIN4</small></li>
   <li><strong>ベアバウンス天井ショート</strong>: 三足DC＋15m/30m/1h全DC中、1m RSI≥70＋価格が5m SMA50/15m SMA50/30m SMA20のいずれかに接触→ショート。<span class="rule-source">出典: Johannsen (2017). SSRN 2961304. / Moskowitz et al. (2012). JFE, 104(2), 228-250.</span> <small class="rule-stat">適用0 / WIN0</small></li>
   <li><strong>CaseA過売れ回復ショート（仮説）</strong>: Case A環境（月足GC＋6足全DC）で1h RSIが≤20から22以上に回復し、かつ5m DCが維持されている最初の下位足DCタイミング→ショート。1h RSI≤20時のエントリー回避後の安全な再エントリー候補。 <small class="rule-stat">適用0 / WIN0</small></li>
+  <li><strong>週足極過売れ＋5m GCロング</strong>: 月足GC + 週足RSI≤30 + 5m GC発生30分以内 + 1m RSI 55-72 + 直近4h安値から1.5%以内→ロング。往復フィー×2必須。<span class="rule-source">出典: Bremer &amp; Sweeney (1991). JF, 46(2), 747-754. / Moskowitz et al. (2012). JFE, 104(2), 228-250.</span> <small class="rule-stat">適用0 / WIN0</small></li>
 </ol>
