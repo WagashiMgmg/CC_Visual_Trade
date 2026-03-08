@@ -101,6 +101,35 @@ class HoldOpportunity(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class EarlyExitOpportunity(Base):
+    """Tracks agent-initiated early exits for deferred hold-longer analysis.
+
+    When the AI decides EXIT before the 4h forced-close window, we record
+    what would have happened if it held until the forced-close time.
+    """
+
+    __tablename__ = "early_exit_opportunities"
+
+    id = Column(Integer, primary_key=True)
+    trade_id = Column(Integer, ForeignKey("trades.id"), nullable=True, index=True)
+    coin = Column(String(20), nullable=False)
+    side = Column(String(10), nullable=False)           # 'long' | 'short'
+    entry_price = Column(Float, nullable=False)
+    exit_price = Column(Float, nullable=False)
+    actual_pnl = Column(Float, nullable=False)
+    exit_time = Column(DateTime, nullable=False)
+    window_end_time = Column(DateTime, nullable=False)   # entry_time + position_max_hours
+    check_time = Column(DateTime, nullable=True)
+    price_at_window_end = Column(Float, nullable=True)  # price at the forced-close mark
+    max_favorable_price = Column(Float, nullable=True)  # best price in remaining window
+    hypothetical_pnl = Column(Float, nullable=True)     # PnL from entry if held to window end
+    max_hypothetical_pnl = Column(Float, nullable=True) # PnL from entry at best price in window
+    chart_archive_dir = Column(String(500), nullable=True)
+    status = Column(String(20), default="pending")      # pending | checked | reflected | skipped
+    reflection_path = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 Base.metadata.create_all(engine)
 
 # Migrate existing tables: add cycle_id to trades if missing

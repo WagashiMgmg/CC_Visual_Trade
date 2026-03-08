@@ -6,6 +6,7 @@
 - **Analysis interval: every {cycle_interval_minutes} minutes.**
 - Only **one position** can be open at a time.
 - Entry size: $100 USD notional (Hyperliquid perpetuals). Leverage only affects margin requirement, not position size. PnL = $100 × price change %.
+- **Round-trip fee (actual)**: {round_trip_fee} — use this value when rule.html says "往復フィー".
 - When already in a position, you will be shown current position info. Choose **EXIT** to close early or **HOLD** to keep it.
 
 ## Chart Indicators

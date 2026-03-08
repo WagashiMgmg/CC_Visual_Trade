@@ -118,10 +118,13 @@ def _load_context() -> str:
     try:
         with open(_CONTEXT_FILE) as f:
             content = f.read().strip()
+        from src.trader import get_round_trip_fee
+        round_trip_fee = get_round_trip_fee()
         context = content.format(
             position_min_hours=settings.position_min_hours,
             position_max_hours=settings.position_max_hours,
             cycle_interval_minutes=settings.cycle_interval_minutes,
+            round_trip_fee=f"${round_trip_fee:.4f}",
         )
     except FileNotFoundError:
         logger.warning(f"Context file not found: {_CONTEXT_FILE}")

@@ -113,6 +113,15 @@ def hold_opportunity_check():
         logger.error(f"Hold opportunity check failed: {e}")
 
 
+def early_exit_check():
+    """Check if any early agent-EXIT decisions would have been better by holding."""
+    from src.early_exit_reflection import check_pending_early_exits
+    try:
+        check_pending_early_exits()
+    except Exception as e:
+        logger.error(f"Early exit check failed: {e}")
+
+
 def digest_curation():
     """Curate reflection digest (runs every 12 hours)."""
     from src.digest import curate_digest
@@ -165,6 +174,15 @@ async def lifespan(app: FastAPI):
         IntervalTrigger(minutes=30),
         id="hold_opportunity_check",
         name="Hold Opportunity Check",
+        max_instances=1,
+        coalesce=True,
+    )
+    # Early-exit analysis every 30 minutes
+    scheduler.add_job(
+        early_exit_check,
+        IntervalTrigger(minutes=30),
+        id="early_exit_check",
+        name="Early Exit Analysis",
         max_instances=1,
         coalesce=True,
     )

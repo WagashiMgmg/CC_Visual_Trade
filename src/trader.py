@@ -29,6 +29,38 @@ def get_user_fee_rate() -> float:
         return settings.fee_rate_fallback
 
 
+def get_round_trip_fee() -> float:
+    """Get round-trip fee in USD for current position_size_usd.
+
+    Priority:
+      1. Most recent closed trade's actual fill fees from DB (entry_fee + exit_fee)
+      2. API fee rate * position_size_usd * 2
+      3. fee_rate_fallback * position_size_usd * 2
+    """
+    try:
+        from src.database import Trade, get_session
+        with get_session() as session:
+            trade = (
+                session.query(Trade)
+                .filter(
+                    Trade.status == "closed",
+                    Trade.entry_fee.isnot(None),
+                    Trade.exit_fee.isnot(None),
+                )
+                .order_by(Trade.id.desc())
+                .first()
+            )
+            if trade and trade.entry_fee is not None and trade.exit_fee is not None:
+                fee = trade.entry_fee + trade.exit_fee
+                logger.info(f"Round-trip fee from DB (trade_id={trade.id}): ${fee:.4f}")
+                return fee
+    except Exception as e:
+        logger.warning(f"Could not get round-trip fee from DB: {e}")
+
+    rate = get_user_fee_rate()
+    return settings.position_size_usd * rate * 2
+
+
 def get_fill_fee(coin: str, oid: int | None = None) -> float | None:
     """Get fee from the most recent fill matching coin (and optionally oid).
     Returns fee in USD or None on error."""

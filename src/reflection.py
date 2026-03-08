@@ -18,6 +18,17 @@ CHARTS_DIR = "/app/charts"
 REFLECTIONS_DIR = "/app/data/reflections"
 HYPOTHESES_FILE = "/app/data/reflections/hypotheses.md"
 
+def fee_note(round_trip_fee: float) -> str:
+    """Fee info block injected into all reflection prompts."""
+    return f"""## システムフィー（ルール記述の参照値）
+- 直近トレードの往復フィー実績: **${round_trip_fee:.4f}**（エントリー+エグジット実費）
+- ⚠️ `rule.html` のルール内でフィーを参照する場合は具体的なドル額を書かず「往復フィー」と表記すること。
+  例: ✓「期待利益が往復フィーの2倍以上」　✗「$0.60以上」
+  補足として `（現在≈${round_trip_fee:.3f}）` を添えるのは可。
+
+"""
+
+
 # Shared consistency-check instruction injected after AGENTS.md rule updates
 RULE_CONSISTENCY_CHECK = """
 **ルール整合性チェック（必須）:**
@@ -122,7 +133,7 @@ def _lookup_entry_cycle(trade_id: int) -> dict | None:
     return None
 
 
-def _build_reflection_prompt(trade_info: dict, cycle_info: dict | None) -> str:
+def _build_reflection_prompt(trade_info: dict, cycle_info: dict | None, round_trip_fee: float | None = None) -> str:
     """Build the Claude prompt for post-trade reflection."""
     archive_dir = trade_info["archive_dir"]
     trade_id = trade_info.get("trade_id", "?")
@@ -160,9 +171,11 @@ def _build_reflection_prompt(trade_info: dict, cycle_info: dict | None) -> str:
     else:
         reasoning_section = "\n## エントリー時のMAGI判断\n（記録なし）\n"
 
+    fee_block = fee_note(round_trip_fee) if round_trip_fee is not None else ""
+
     return f"""# トレード振り返りタスク
 
-## トレード情報
+{fee_block}## トレード情報
 - Trade ID: {trade_id}
 - コイン: {coin}
 - サイド: {side.upper()}
@@ -301,7 +314,9 @@ def trigger_reflection(trade_info: dict) -> None:
         return
 
     cycle_info = _lookup_entry_cycle(trade_info.get("trade_id"))
-    prompt = _build_reflection_prompt(trade_info, cycle_info)
+    from src.trader import get_round_trip_fee
+    round_trip_fee = get_round_trip_fee()
+    prompt = _build_reflection_prompt(trade_info, cycle_info, round_trip_fee)
 
     try:
         env = os.environ.copy()

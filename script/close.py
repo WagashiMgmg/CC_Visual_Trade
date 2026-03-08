@@ -8,6 +8,7 @@ from datetime import datetime
 
 from src.config import settings
 from src.database import Trade, get_session
+from src.early_exit_reflection import record_early_exit
 from src.reflection import trigger_reflection
 from src.trader import calc_pnl
 
@@ -104,6 +105,7 @@ def run():
 
     if trade_info:
         trigger_reflection(trade_info)
+        record_early_exit(trade_info)
 
 
 if __name__ == "__main__":
