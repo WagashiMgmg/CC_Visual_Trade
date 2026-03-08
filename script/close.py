@@ -72,7 +72,7 @@ def run():
             from src.trader import _close_position
             try:
                 exit_price = _close_position(trade)
-            except RuntimeError as e:
+            except Exception as e:
                 print(f"ERROR: Close incomplete for trade_id={trade.id}: {e}")
                 print("Position kept as 'open' — will retry on next cycle.")
                 return

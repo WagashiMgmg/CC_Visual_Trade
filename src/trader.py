@@ -33,13 +33,24 @@ def get_round_trip_fee() -> float:
     """Get round-trip fee in USD for current position_size_usd.
 
     Priority:
-      1. Most recent closed trade's actual fill fees from DB (entry_fee + exit_fee)
-      2. API fee rate * position_size_usd * 2
-      3. fee_rate_fallback * position_size_usd * 2
+      1. Current open trade's entry_fee + API-estimated exit_fee
+      2. Most recent closed trade's actual fill fees from DB (entry_fee + exit_fee)
+      3. API fee rate * position_size_usd * 2
+      4. fee_rate_fallback * position_size_usd * 2
     """
     try:
         from src.database import Trade, get_session
         with get_session() as session:
+            # Priority 1: current open trade (use actual entry_fee + estimated exit_fee)
+            open_trade = session.query(Trade).filter(Trade.status == "open").first()
+            if open_trade and open_trade.entry_fee is not None:
+                rate = get_user_fee_rate()
+                exit_fee_estimate = settings.position_size_usd * rate
+                fee = open_trade.entry_fee + exit_fee_estimate
+                logger.info(f"Round-trip fee from open trade_id={open_trade.id}: ${fee:.4f}")
+                return fee
+
+            # Priority 2: most recent closed trade with full fee data
             trade = (
                 session.query(Trade)
                 .filter(
