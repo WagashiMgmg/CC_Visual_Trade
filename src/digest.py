@@ -46,7 +46,11 @@ def _read_reflections() -> list[tuple[str, str, str]]:
             match = re.search(r"(LONG|SHORT)", content[:500])
             category = match.group(1) if match else "UNKNOWN"
         elif fname.startswith("hold_"):
-            category = "HOLD"
+            match = re.search(r"見逃し(ロング|ショート)", content[:200])
+            if match:
+                category = "HOLD_LONG" if match.group(1) == "ロング" else "HOLD_SHORT"
+            else:
+                category = "HOLD"
         else:
             continue
 
@@ -77,9 +81,10 @@ def _build_curation_prompt(reflections: list[tuple[str, str, str]]) -> str:
 - Magnitude (10%): PnLインパクト
 
 ## 出力要件
-- LONG / SHORT / HOLD の各カテゴリからインパクトファクター上位4件を選出
+- LONG / SHORT / HOLD_LONG / HOLD_SHORT の各カテゴリからインパクトファクター上位4件を選出
 - 各エントリを日本語100-150文字に圧縮
 - カテゴリ内のファイルが4件未満の場合はすべて採用
+- HOLD_LONG/HOLD_SHORTが0件のセクションは出力しない
 - Write ツールで `{DIGEST_FILE}` に以下のフォーマットで書き出すこと
 
 ## 出力フォーマット
@@ -95,7 +100,11 @@ _最終更新: YYYY-MM-DD HH:MM UTC_
 - [Trade N] （100-150文字の圧縮教訓）
 - ...
 
-## HOLD（見逃し）の教訓
+## HOLD（ロング見逃し）の教訓
+- [Hold N] （100-150文字の圧縮教訓）
+- ...
+
+## HOLD（ショート見逃し）の教訓
 - [Hold N] （100-150文字の圧縮教訓）
 - ...
 ```
