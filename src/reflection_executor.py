@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import threading
+from collections.abc import Callable
 from datetime import datetime
 
 from src.magi import (
@@ -43,7 +44,7 @@ def execute_reflection(
     archive_dir: str | None,
     trade_data: dict,
     chart_paths: list[str] | None = None,
-    db_update_fn: callable | None = None,
+    db_update_fn: Callable | None = None,
 ) -> None:
     """Launch reflection in a background thread with agent fallback chain.
 
@@ -75,7 +76,7 @@ def _run_reflection(
     archive_dir: str | None,
     trade_data: dict,
     chart_paths: list[str] | None,
-    db_update_fn: callable | None,
+    db_update_fn: Callable | None,
 ) -> None:
     """Background thread: try agents in fallback order."""
     if db_update_fn:
@@ -353,7 +354,7 @@ def retry_pending_reflections() -> None:
         os.remove(fpath)
 
 
-def _build_db_update_fn(data: dict) -> callable | None:
+def _build_db_update_fn(data: dict) -> Callable | None:
     """Build a DB update function for hold/early_exit reflections."""
     reflection_type = data.get("reflection_type")
 
