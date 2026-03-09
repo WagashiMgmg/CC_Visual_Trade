@@ -356,6 +356,9 @@ def check_pending_early_exits() -> None:
     Called by the scheduler every 30 minutes. For each pending opportunity
     whose window_end_time has passed, fetches price data and decides whether
     to trigger a reflection (improvement >= threshold) or skip.
+
+    Also retries stale "checked" entries whose reflection thread was killed
+    (e.g. container restart) before the reflection file was written.
     """
     now = datetime.utcnow()
 
@@ -369,10 +372,36 @@ def check_pending_early_exits() -> None:
             .all()
         )
 
-        if not pending:
+        # Stale entries: reflection was triggered but thread was killed
+        # (e.g. container restart) before reflection_path was written.
+        # "checked"  → trigger_early_exit_reflection was called but thread never started
+        # "reflecting" → thread started but was killed (check_time > 20 min ago)
+        stale_cutoff = now - timedelta(minutes=20)
+        stale = [
+            opp for opp in (
+                session.query(EarlyExitOpportunity)
+                .filter(
+                    EarlyExitOpportunity.reflection_path == None,  # noqa: E711
+                    (
+                        (EarlyExitOpportunity.status == "checked") |
+                        (
+                            (EarlyExitOpportunity.status == "reflecting") &
+                            (EarlyExitOpportunity.check_time <= stale_cutoff)
+                        )
+                    ),
+                )
+                .all()
+            )
+            if opp.chart_archive_dir and os.path.isdir(opp.chart_archive_dir)
+        ]
+
+        if not pending and not stale:
             return
 
-        logger.info(f"Checking {len(pending)} pending early exit opportunities")
+        logger.info(
+            f"Checking {len(pending)} pending early exit opportunities"
+            + (f", retrying {len(stale)} stale" if stale else "")
+        )
 
         from src.trader import get_round_trip_fee
         round_trip_fee = get_round_trip_fee()
@@ -419,3 +448,10 @@ def check_pending_early_exits() -> None:
             except Exception as e:
                 logger.error(f"Error checking early exit opportunity {opp.id}: {e}")
                 session.commit()
+
+        for opp in stale:
+            logger.info(
+                f"Retrying stale early exit {opp.id} (trade {opp.trade_id}): "
+                f"status=checked but reflection_path=NULL — relaunching"
+            )
+            trigger_early_exit_reflection(opp.id, round_trip_fee=round_trip_fee)
