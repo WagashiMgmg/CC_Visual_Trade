@@ -35,6 +35,9 @@ logger = logging.getLogger(__name__)
 REFLECTIONS_DIR = "/app/data/reflections"
 PENDING_DIR = f"{REFLECTIONS_DIR}/pending"
 
+# Limit concurrent agent calls to avoid API rate limiting (Claude Sonnet 429)
+_reflection_semaphore = threading.Semaphore(2)
+
 
 def execute_reflection(
     reflection_type: str,
@@ -79,6 +82,24 @@ def _run_reflection(
     db_update_fn: Callable | None,
 ) -> None:
     """Background thread: try agents in fallback order."""
+    with _reflection_semaphore:
+        _run_reflection_inner(
+            reflection_type, identifier, claude_prompt, expected_reflection_path,
+            archive_dir, trade_data, chart_paths, db_update_fn,
+        )
+
+
+def _run_reflection_inner(
+    reflection_type: str,
+    identifier: str,
+    claude_prompt: str,
+    expected_reflection_path: str,
+    archive_dir: str | None,
+    trade_data: dict,
+    chart_paths: list[str] | None,
+    db_update_fn: Callable | None,
+) -> None:
+    """Actual reflection logic (called inside semaphore)."""
     if db_update_fn:
         try:
             db_update_fn("reflecting")

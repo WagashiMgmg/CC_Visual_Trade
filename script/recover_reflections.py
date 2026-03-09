@@ -2,7 +2,8 @@
 One-shot recovery script for reflections broken by the callable|None bug.
 
 Fixes:
-  - Hold opportunities stuck in 'checked' without a reflection file → reset to 'pending'
+  - Hold opportunities stuck in 'checked' without a reflection file → trigger directly
+    (does NOT reset to 'pending' to avoid 23 simultaneous scheduler launches)
   - Closed trades with chart archives but no reflection file → trigger_reflection
 
 Run inside Docker:
@@ -24,12 +25,19 @@ CHARTS_DIR = "/app/charts"
 
 
 def recover_holds():
+    """Reset 'checked' holds without reflection files back to 'pending'.
+
+    Note: the reflection_executor semaphore (max 2 concurrent) prevents
+    rate limiting even when the scheduler processes many holds at once.
+    'pending' holds are left for the scheduler to process naturally.
+    """
     from src.database import get_session, HoldOpportunity
 
     with get_session() as session:
         checked = (
             session.query(HoldOpportunity)
             .filter(HoldOpportunity.status == "checked")
+            .order_by(HoldOpportunity.id)
             .all()
         )
         reset_ids = []
