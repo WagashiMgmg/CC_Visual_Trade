@@ -319,7 +319,7 @@ git log -p -20 -- prompt/rule.html
 **rule.html変更後のコミット＆プッシュ（必須）:**
 rule.htmlを変更した場合、以下のコマンドで必ずコミット＆プッシュしてください:
 ```bash
-git pull --rebase && git add prompt/rule.html && git commit -m "reflect: Trade {trade_id} — rule.html update" && git push
+git pull --rebase --autostash && git add prompt/rule.html && git commit -m "reflect: Trade {trade_id} — rule.html update" && git push
 ```
 
 ステップ5: `{HYPOTHESES_FILE}` を更新してください（Writeツール使用）。以下のルールに従ってください:

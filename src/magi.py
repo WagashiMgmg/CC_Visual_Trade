@@ -130,6 +130,7 @@ class ClaudeAgent(MagiAgent):
                 "claude", "-p", prompt,
                 "--model", self._MODEL,
                 "--permission-mode", "bypassPermissions",
+                "--no-session-persistence",
             ]
             if allowed_tools:
                 cmd += ["--allowedTools", allowed_tools]
@@ -327,6 +328,7 @@ class CasparAgent(MagiAgent):
                 "claude", "-p", prompt,
                 "--model", self._HAIKU_MODEL,
                 "--permission-mode", "bypassPermissions",
+                "--no-session-persistence",
             ]
             if allowed_tools:
                 cmd += ["--allowedTools", allowed_tools]

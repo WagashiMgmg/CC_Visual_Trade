@@ -28,31 +28,9 @@ async def _take_screenshot() -> bytes:
     return data
 
 
-async def _notify_tunnel_url() -> None:
-    """data/tunnel_url にURLが書かれていればDiscordに通知する。"""
-    channel_id = settings.discord_channel_id
-    if not channel_id:
-        return
-    try:
-        url_file = "/app/data/tunnel_url"
-        with open(url_file) as f:
-            url = f.read().strip()
-        if not url:
-            return
-        channel = bot.get_channel(int(channel_id))
-        if channel:
-            await channel.send(f"🚀 **Dashboard URL**: {url}")
-            logger.info(f"Notified tunnel URL to Discord: {url}")
-    except FileNotFoundError:
-        pass
-    except Exception as e:
-        logger.warning(f"Tunnel URL notification failed: {e}")
-
-
 @bot.event
 async def on_ready():
     logger.info(f"Discord bot ready: {bot.user} (prefix=!)")
-    await _notify_tunnel_url()
 
 
 @bot.command(name="screenshot", aliases=["ss", "s"])

@@ -170,6 +170,7 @@ def curate_digest() -> None:
                 "claude", "-p", prompt,
                 "--allowedTools", "Read,Write",
                 "--permission-mode", "bypassPermissions",
+                "--no-session-persistence",
             ],
             cwd="/app",
             capture_output=True,
