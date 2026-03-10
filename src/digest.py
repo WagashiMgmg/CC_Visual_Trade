@@ -51,6 +51,9 @@ def _read_reflections() -> list[tuple[str, str, str]]:
                 category = "HOLD_LONG" if match.group(1) == "ロング" else "HOLD_SHORT"
             else:
                 category = "HOLD"
+        elif fname.startswith("early_exit_"):
+            match = re.search(r"(LONG|SHORT)", content[:200])
+            category = f"EARLY_EXIT_{match.group(1)}" if match else "EARLY_EXIT"
         else:
             continue
 
@@ -81,10 +84,10 @@ def _build_curation_prompt(reflections: list[tuple[str, str, str]]) -> str:
 - Magnitude (10%): PnLインパクト
 
 ## 出力要件
-- LONG / SHORT / HOLD_LONG / HOLD_SHORT の各カテゴリからインパクトファクター上位4件を選出
+- LONG / SHORT / HOLD_LONG / HOLD_SHORT / EARLY_EXIT_LONG / EARLY_EXIT_SHORT の各カテゴリからインパクトファクター上位4件を選出
 - 各エントリを日本語100-150文字に圧縮
 - カテゴリ内のファイルが4件未満の場合はすべて採用
-- HOLD_LONG/HOLD_SHORTが0件のセクションは出力しない
+- 0件のセクションは出力しない
 - Write ツールで `{DIGEST_FILE}` に以下のフォーマットで書き出すこと
 
 ## 出力フォーマット
@@ -107,9 +110,17 @@ _最終更新: YYYY-MM-DD HH:MM UTC_
 ## HOLD（ショート見逃し）の教訓
 - [Hold N] （100-150文字の圧縮教訓）
 - ...
+
+## Early Exit（ロング）の教訓
+- [EarlyExit N] （100-150文字の圧縮教訓）
+- ...
+
+## Early Exit（ショート）の教訓
+- [EarlyExit N] （100-150文字の圧縮教訓）
+- ...
 ```
 
-注意: ファイル名から番号を抽出して [Trade N] / [Hold N] の形式で記載すること。
+注意: ファイル名から番号を抽出して [Trade N] / [Hold N] / [EarlyExit N] の形式で記載すること。
 """
 
 
@@ -123,6 +134,8 @@ def _parse_selected_ids(digest_content: str) -> set[str]:
         selected.add(f"trade_{match.group(1)}.md")
     for match in re.finditer(r"\[Hold\s+(\d+)\]", digest_content):
         selected.add(f"hold_{match.group(1)}.md")
+    for match in re.finditer(r"\[EarlyExit\s+(\d+)\]", digest_content):
+        selected.add(f"early_exit_{match.group(1)}.md")
     return selected
 
 
@@ -140,7 +153,7 @@ def _archive_unselected(selected: set[str]) -> int:
         fpath = os.path.join(REFLECTIONS_DIR, fname)
         if not os.path.isfile(fpath) or not fname.endswith(".md"):
             continue
-        if not (fname.startswith("trade_") or fname.startswith("hold_")):
+        if not (fname.startswith("trade_") or fname.startswith("hold_") or fname.startswith("early_exit_")):
             continue
         if fname in selected:
             continue
