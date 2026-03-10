@@ -259,8 +259,9 @@ def _get_reflections():
     trade_files = list(dir_path.glob("trade_*.md"))
     hold_files = list(dir_path.glob("hold_*.md"))
     early_exit_files = list(dir_path.glob("early_exit_*.md"))
+    late_exit_files = list(dir_path.glob("late_exit_*.md"))
     files = sorted(
-        trade_files + hold_files + early_exit_files,
+        trade_files + hold_files + early_exit_files + late_exit_files,
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     )

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from src.config import settings, make_info, make_exchange
 from src.database import Trade, get_session
+from src.late_exit_reflection import check_and_trigger_late_exit
 from src.reflection import trigger_reflection
 
 logger = logging.getLogger(__name__)
@@ -240,6 +241,7 @@ def close_expired_positions():
 
     for trade_info in closed_trades:
         trigger_reflection(trade_info)
+        check_and_trigger_late_exit(trade_info)
 
 
 def _get_hl_position(info, coin: str) -> dict | None:
@@ -402,7 +404,7 @@ def sync_position_state():
                 f"Likely liquidated or manually closed."
             )
 
-            trigger_reflection({
+            _trade_info = {
                 "trade_id": db_trade.id,
                 "coin": db_trade.coin,
                 "side": db_trade.side,
@@ -412,7 +414,9 @@ def sync_position_state():
                 "entry_time": db_trade.entry_time,
                 "exit_time": exit_time,
                 "archive_dir": f"/app/charts/trade_{db_trade.id}",
-            })
+            }
+            trigger_reflection(_trade_info)
+            check_and_trigger_late_exit(_trade_info)
             return
 
         # ── Case B: DB has no open trade, but HL has a position ──
