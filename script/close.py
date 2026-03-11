@@ -96,6 +96,7 @@ def run():
             "entry_price": trade.entry_price,
             "exit_price": exit_price,
             "pnl_usd": round(pnl, 4),
+            "size_usd": trade.size_usd,
             "entry_time": trade.entry_time,
             "exit_time": exit_time,
             "archive_dir": f"/app/charts/trade_{trade.id}",

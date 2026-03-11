@@ -43,12 +43,11 @@ def _calculate_mfe(
     entry_price: float,
     entry_time: datetime,
     exit_time: datetime,
-    size_usd: float,
 ) -> tuple[float, float, str]:
     """Calculate Maximum Favorable Excursion during the trade period.
 
-    Returns (best_price, best_pnl, best_time_iso).
-    best_pnl is total PnL from entry (comparable to trade.pnl_usd).
+    Returns (best_price, best_pnl_pct, best_time_iso).
+    best_pnl_pct is price change % from entry.
     """
     candles = _fetch_candles(coin, entry_time, exit_time)
     if not candles:
@@ -57,45 +56,47 @@ def _calculate_mfe(
     if side == "long":
         best_candle = max(candles, key=lambda c: float(c["h"]))
         best_price = float(best_candle["h"])
-        best_pnl = (best_price - entry_price) / entry_price * size_usd
+        best_pnl_pct = (best_price - entry_price) / entry_price * 100
     else:
         best_candle = min(candles, key=lambda c: float(c["l"]))
         best_price = float(best_candle["l"])
-        best_pnl = (entry_price - best_price) / entry_price * size_usd
+        best_pnl_pct = (entry_price - best_price) / entry_price * 100
 
     best_time = datetime.fromtimestamp(
         int(best_candle["t"]) / 1000, tz=timezone.utc
     ).isoformat()
 
-    return best_price, best_pnl, best_time
+    return best_price, best_pnl_pct, best_time
 
 
 def _build_late_exit_prompt(
     trade_info: dict,
     best_price: float,
-    best_pnl: float,
+    best_pnl_pct: float,
     best_time: str,
-    round_trip_fee: float | None = None,
+    fee_rate_pct: float | None = None,
 ) -> str:
     trade_id = trade_info["trade_id"]
     coin = trade_info["coin"]
     side = trade_info["side"]
     entry_price = trade_info["entry_price"]
     exit_price = trade_info["exit_price"]
-    actual_pnl = trade_info["pnl_usd"]
+    actual_pnl_usd = trade_info["pnl_usd"]
+    size_usd = trade_info.get("size_usd", 0) or 1
+    actual_pnl_pct = actual_pnl_usd / size_usd * 100
     entry_time = trade_info["entry_time"]
     exit_time = trade_info["exit_time"]
     archive_dir = trade_info.get("archive_dir", "")
 
     def fmt_pnl(v):
-        return f"+${v:.2f}" if v >= 0 else f"-${abs(v):.2f}"
+        return f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%"
 
-    actual_str = fmt_pnl(actual_pnl)
-    best_str = fmt_pnl(best_pnl)
-    giveback = best_pnl - actual_pnl
-    giveback_str = fmt_pnl(giveback)
+    actual_str = fmt_pnl(actual_pnl_pct)
+    best_str = fmt_pnl(best_pnl_pct)
+    giveback_pct = best_pnl_pct - actual_pnl_pct
+    giveback_str = fmt_pnl(giveback_pct)
     side_jp = "ロング" if side == "long" else "ショート"
-    fee_block = fee_note(round_trip_fee) if round_trip_fee is not None else ""
+    fee_block = fee_note(fee_rate_pct) if fee_rate_pct is not None else ""
 
     return f"""# 遅延EXIT振り返りタスク
 
@@ -207,7 +208,7 @@ git pull --rebase --autostash && git add prompt/rule.html && git commit -m "refl
 
 def check_and_trigger_late_exit(
     trade_info: dict,
-    round_trip_fee: float | None = None,
+    fee_rate_pct: float | None = None,
 ) -> None:
     """Check if MFE giveback exceeds threshold; if so, trigger late-exit reflection.
 
@@ -234,39 +235,41 @@ def check_and_trigger_late_exit(
     coin = trade_info.get("coin", "")
     side = trade_info.get("side", "")
     entry_price = trade_info.get("entry_price", 0.0)
-    actual_pnl = trade_info.get("pnl_usd", 0.0)
+    actual_pnl_usd = trade_info.get("pnl_usd", 0.0)
+    size_usd = trade_info.get("size_usd", 0) or 1
+    actual_pnl_pct = actual_pnl_usd / size_usd * 100
     trade_id = trade_info.get("trade_id")
 
     try:
-        best_price, best_pnl, best_time = _calculate_mfe(
-            coin, side, entry_price, entry_time, exit_time, settings.position_size_usd
+        best_price, best_pnl_pct, best_time = _calculate_mfe(
+            coin, side, entry_price, entry_time, exit_time
         )
     except Exception as e:
         logger.error(f"Late exit MFE calculation failed for trade {trade_id}: {e}")
         return
 
-    giveback = best_pnl - actual_pnl
+    giveback_pct = best_pnl_pct - actual_pnl_pct
 
-    if round_trip_fee is None:
-        from src.trader import get_round_trip_fee
-        round_trip_fee = get_round_trip_fee()
+    if fee_rate_pct is None:
+        from src.trader import get_fee_rate_pct
+        fee_rate_pct = get_fee_rate_pct()
 
-    threshold = round_trip_fee * settings.hold_reflection_min_pnl_multiplier
+    threshold_pct = fee_rate_pct * settings.hold_reflection_min_pnl_multiplier
 
-    if giveback < threshold:
+    if giveback_pct < threshold_pct:
         logger.info(
-            f"Late exit check trade {trade_id}: giveback=${giveback:.2f} "
-            f"below threshold=${threshold:.2f} — skipped"
+            f"Late exit check trade {trade_id}: giveback={giveback_pct:.2f}% "
+            f"below threshold={threshold_pct:.2f}% — skipped"
         )
         return
 
     logger.info(
-        f"Late exit trade {trade_id}: MFE={best_price:.2f} giveback=${giveback:.2f} "
-        f"≥ threshold=${threshold:.2f} — triggering reflection"
+        f"Late exit trade {trade_id}: MFE={best_price:.2f} giveback={giveback_pct:.2f}% "
+        f"≥ threshold={threshold_pct:.2f}% — triggering reflection"
     )
 
     prompt = _build_late_exit_prompt(
-        trade_info, best_price, best_pnl, best_time, round_trip_fee
+        trade_info, best_price, best_pnl_pct, best_time, fee_rate_pct
     )
     archive_dir = trade_info.get("archive_dir", "")
     chart_paths = (

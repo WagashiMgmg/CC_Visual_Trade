@@ -59,7 +59,7 @@ def recover_trades():
     from src.database import get_session, Trade
     from src.reflection import _build_reflection_prompt, _lookup_all_cycles, REFLECTIONS_DIR as REFL_DIR
     from src.reflection_executor import _run_reflection
-    from src.trader import get_round_trip_fee
+    from src.trader import get_fee_rate_pct
 
     with get_session() as session:
         closed_trades = (
@@ -80,6 +80,7 @@ def recover_trades():
                     "entry_price": t.entry_price,
                     "exit_price": t.exit_price,
                     "pnl_usd": t.pnl_usd,
+                    "size_usd": t.size_usd,
                     "entry_time": t.entry_time.isoformat() if t.entry_time else None,
                     "exit_time": t.exit_time.isoformat() if t.exit_time else None,
                     "archive_dir": archive_dir,
@@ -92,13 +93,13 @@ def recover_trades():
         return
 
     logger.info(f"Found {len(stranded)} stranded trade(s): {[t['trade_id'] for t in stranded]}")
-    round_trip_fee = get_round_trip_fee()
+    fee_rate_pct = get_fee_rate_pct()
     threads = []
     for trade_info in stranded:
         trade_id = trade_info["trade_id"]
         archive_dir = trade_info["archive_dir"]
         cycle_history = _lookup_all_cycles(trade_id)
-        prompt = _build_reflection_prompt(trade_info, cycle_history, round_trip_fee)
+        prompt = _build_reflection_prompt(trade_info, cycle_history, fee_rate_pct)
         chart_paths = [
             f"{archive_dir}/{f}" for f in os.listdir(archive_dir) if f.endswith(".png")
         ] if os.path.isdir(archive_dir) else []

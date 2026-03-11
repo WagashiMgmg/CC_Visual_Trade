@@ -172,25 +172,26 @@ def check_emergency():
 
         loss_threshold = -(settings.emergency_loss_pct / 100) * size_usd
         profit_threshold = (settings.emergency_profit_pct / 100) * size_usd
+        pnl_pct = pnl / size_usd * 100 if size_usd else 0
 
         if pnl <= loss_threshold:
             _run_emergency_cycle(
-                reason=f"含み損アラート: ${pnl:.2f} (閾値: ${loss_threshold:.2f})",
+                reason=f"含み損アラート: {pnl_pct:.1f}% (閾値: -{settings.emergency_loss_pct}%)",
                 details=(
                     f"サイド: {live_pos['side'].upper()}\n"
                     f"エントリー: ${live_pos['entry_price']:,.2f}\n"
-                    f"含み損益: ${pnl:.2f} ({pnl / size_usd * 100:.1f}%)"
+                    f"含み損益: {pnl_pct:.1f}%"
                 ),
             )
             return
 
         if pnl >= profit_threshold:
             _run_emergency_cycle(
-                reason=f"含み益アラート: +${pnl:.2f} (閾値: +${profit_threshold:.2f})",
+                reason=f"含み益アラート: +{pnl_pct:.1f}% (閾値: +{settings.emergency_profit_pct}%)",
                 details=(
                     f"サイド: {live_pos['side'].upper()}\n"
                     f"エントリー: ${live_pos['entry_price']:,.2f}\n"
-                    f"含み損益: +${pnl:.2f} ({pnl / size_usd * 100:.1f}%)"
+                    f"含み損益: +{pnl_pct:.1f}%"
                 ),
             )
             return
@@ -199,11 +200,14 @@ def check_emergency():
     if live_pos and current_price is not None:
         triggered, move_pct = _check_rapid_move()
         if triggered:
+            upnl = live_pos.get('unrealized_pnl', 0)
+            pos_size = live_pos.get('size_usd', 1) or 1
+            upnl_pct = upnl / pos_size * 100 if pos_size else 0
             _run_emergency_cycle(
                 reason=f"価格急変動: {move_pct:+.2f}% ({settings.emergency_price_move_minutes}分間)",
                 details=(
                     f"現在価格: ${current_price:,.2f}\n"
                     f"サイド: {live_pos['side'].upper()}\n"
-                    f"含み損益: ${live_pos.get('unrealized_pnl', 0):.2f}"
+                    f"含み損益: {upnl_pct:+.1f}%"
                 ),
             )

@@ -62,6 +62,216 @@ class TestPnlCalc:
         assert calc_pnl("long", 80_000, 80_000, 100) == pytest.approx(0.0)
 
 
+# ── Dynamic position sizing tests (unit, no network) ─────────────────────
+
+class TestDynamicPositionSizing:
+    """Test ATR-based dynamic position sizing logic."""
+
+    def test_dry_run_returns_fallback(self):
+        """DRY_RUN=true ではフォールバック値を返す"""
+        from src.trader import get_dynamic_position_size
+        original = settings.dry_run
+        try:
+            settings.dry_run = True
+            size, equity = get_dynamic_position_size()
+            assert size == settings.position_size_usd
+            assert equity == settings.position_size_usd / 2
+        finally:
+            settings.dry_run = original
+
+    def test_formula_basic(self):
+        """ATRベース計算: equity=50, ATR_pct=0.00412, multiplier=2 → ~121"""
+        from unittest.mock import patch
+        original = settings.dry_run
+        try:
+            settings.dry_run = False
+            with patch("src.trader.get_account_equity", return_value=50.0), \
+                 patch("src.trader.get_current_atr_pct", return_value=0.00412):
+                from src.trader import get_dynamic_position_size
+                size, equity = get_dynamic_position_size()
+                # max_loss = 50 * 0.02 = 1.0
+                # adverse = 0.00412 * 2.0 = 0.00824
+                # raw_size = 1.0 / 0.00824 = 121.36
+                assert equity == 50.0
+                assert 120 <= size <= 123
+        finally:
+            settings.dry_run = original
+
+    def test_min_clamp(self):
+        """サイズ下限(min_position_usd)でクランプされる"""
+        from unittest.mock import patch
+        original = settings.dry_run
+        try:
+            settings.dry_run = False
+            # equity very small → size below min
+            with patch("src.trader.get_account_equity", return_value=1.0), \
+                 patch("src.trader.get_current_atr_pct", return_value=0.01):
+                from src.trader import get_dynamic_position_size
+                size, equity = get_dynamic_position_size()
+                assert size == settings.min_position_usd
+        finally:
+            settings.dry_run = original
+
+    def test_max_clamp(self):
+        """サイズ上限(max_position_usd)でクランプされる"""
+        from unittest.mock import patch
+        original = settings.dry_run
+        try:
+            settings.dry_run = False
+            # equity huge → size above max
+            with patch("src.trader.get_account_equity", return_value=100_000.0), \
+                 patch("src.trader.get_current_atr_pct", return_value=0.001):
+                from src.trader import get_dynamic_position_size
+                size, equity = get_dynamic_position_size()
+                assert size == settings.max_position_usd
+        finally:
+            settings.dry_run = original
+
+    def test_zero_atr_fallback(self):
+        """ATR=0の場合はフォールバック値を返す"""
+        from unittest.mock import patch
+        original = settings.dry_run
+        try:
+            settings.dry_run = False
+            with patch("src.trader.get_account_equity", return_value=50.0), \
+                 patch("src.trader.get_current_atr_pct", return_value=0.0):
+                from src.trader import get_dynamic_position_size
+                size, equity = get_dynamic_position_size()
+                # adverse = 0 → fallback to position_size_usd, clamped by min/max
+                assert size == min(settings.max_position_usd,
+                                   max(settings.min_position_usd, settings.position_size_usd))
+        finally:
+            settings.dry_run = original
+
+    def test_api_failure_fallback(self):
+        """API失敗時はフォールバック値を返す"""
+        from unittest.mock import patch
+        original = settings.dry_run
+        try:
+            settings.dry_run = False
+            with patch("src.trader.get_account_equity", side_effect=Exception("API down")):
+                from src.trader import get_dynamic_position_size
+                size, equity = get_dynamic_position_size()
+                assert size == settings.position_size_usd
+                assert equity == settings.position_size_usd / 2
+        finally:
+            settings.dry_run = original
+
+    def test_high_atr_reduces_size(self):
+        """ATRが高い → サイズ縮小"""
+        from unittest.mock import patch
+        original = settings.dry_run
+        try:
+            settings.dry_run = False
+            with patch("src.trader.get_account_equity", return_value=50.0):
+                from src.trader import get_dynamic_position_size
+                with patch("src.trader.get_current_atr_pct", return_value=0.002):
+                    size_low_vol, _ = get_dynamic_position_size()
+                with patch("src.trader.get_current_atr_pct", return_value=0.008):
+                    size_high_vol, _ = get_dynamic_position_size()
+                assert size_low_vol > size_high_vol
+        finally:
+            settings.dry_run = original
+
+
+class TestFeeRatePct:
+    """Test fee rate percentage calculation."""
+
+    def test_fee_rate_pct_formula(self):
+        """get_fee_rate_pct() = user_fee_rate * 2 * 100"""
+        from unittest.mock import patch
+        with patch("src.trader.get_user_fee_rate", return_value=0.00045):
+            from src.trader import get_fee_rate_pct
+            rate = get_fee_rate_pct()
+            assert rate == pytest.approx(0.09, rel=1e-4)
+
+    def test_fee_rate_pct_with_different_rate(self):
+        """異なるフィーレートでも正しく計算"""
+        from unittest.mock import patch
+        with patch("src.trader.get_user_fee_rate", return_value=0.00035):
+            from src.trader import get_fee_rate_pct
+            rate = get_fee_rate_pct()
+            assert rate == pytest.approx(0.07, rel=1e-4)
+
+
+class TestCurrentAtrPct:
+    """Test ATR percentage calculation."""
+
+    def test_atr_pct_from_candles(self):
+        """fetch_candles + _atr で ATR% が正しく計算されるか"""
+        import pandas as pd
+        from unittest.mock import patch
+
+        # Create mock candle data with known ATR
+        dates = pd.date_range("2024-01-01", periods=30, freq="15min", tz="UTC")
+        df = pd.DataFrame({
+            "Open":   [100.0] * 30,
+            "High":   [102.0] * 30,
+            "Low":    [98.0] * 30,
+            "Close":  [101.0] * 30,
+            "Volume": [1000.0] * 30,
+        }, index=dates)
+
+        with patch("src.chart.fetch_candles", return_value=df):
+            from src.trader import get_current_atr_pct
+            atr_pct = get_current_atr_pct("BTC")
+            # ATR should be ~4.0 (high-low=4, all true ranges equal)
+            # atr_pct = 4.0 / 101.0 ≈ 0.0396
+            assert 0.03 < atr_pct < 0.05
+
+
+class TestPnlPercentConversion:
+    """Test that PnL is correctly expressed as price change %."""
+
+    def test_reflection_pnl_pct(self):
+        """_build_reflection_prompt が PnL% を正しく計算するか"""
+        from src.reflection import _build_reflection_prompt
+        trade_info = {
+            "archive_dir": "/app/charts/trade_1",
+            "trade_id": 1,
+            "coin": "BTC",
+            "side": "long",
+            "entry_price": 80000.0,
+            "exit_price": 80800.0,
+            "pnl_usd": 1.0,      # $1 profit on $100 size = 1%
+            "size_usd": 100.0,
+            "entry_time": "2024-01-01T00:00:00",
+            "exit_time": "2024-01-01T01:00:00",
+        }
+        prompt = _build_reflection_prompt(trade_info, None, fee_rate_pct=0.09)
+        # PnL should be +1.00%
+        assert "+1.00%" in prompt
+        assert "WIN" in prompt
+        # Fee note should show %
+        assert "~0.090%" in prompt
+
+    def test_reflection_loss_pct(self):
+        """LOSS時のPnL%表示"""
+        from src.reflection import _build_reflection_prompt
+        trade_info = {
+            "archive_dir": "/app/charts/trade_2",
+            "trade_id": 2,
+            "coin": "BTC",
+            "side": "short",
+            "entry_price": 80000.0,
+            "exit_price": 80400.0,
+            "pnl_usd": -0.5,
+            "size_usd": 100.0,
+            "entry_time": "2024-01-01T00:00:00",
+            "exit_time": "2024-01-01T01:00:00",
+        }
+        prompt = _build_reflection_prompt(trade_info, None, fee_rate_pct=0.09)
+        assert "-0.50%" in prompt
+        assert "LOSS" in prompt
+
+    def test_fee_note_pct_format(self):
+        """fee_note が % フォーマットで出力されるか"""
+        from src.reflection import fee_note
+        note = fee_note(0.09)
+        assert "~0.090%" in note
+        assert "$" not in note
+
+
 # ── Market data tests ─────────────────────────────────────────────────────────
 
 class TestMarketData:
@@ -224,3 +434,49 @@ class TestOrderPlacement:
             if oid:
                 exchange.cancel(coin, oid)
             print(f"  GTC注文成功(resting) → キャンセル済み (oracle制約でIOC即約定不可)")
+
+
+# ── Dynamic sizing integration tests (testnet API) ───────────────────────
+
+class TestDynamicSizingIntegration:
+    """Testnet API integration tests for dynamic position sizing."""
+
+    def test_get_account_equity(self):
+        """テストネットからaccountValueを取得できるか"""
+        from src.trader import get_account_equity
+        equity = get_account_equity()
+        assert isinstance(equity, float)
+        assert equity >= 0
+        print(f"\n  Account equity: ${equity:.2f}")
+
+    def test_get_current_atr_pct(self):
+        """15分足ATR(14)を価格比%で取得できるか"""
+        from src.trader import get_current_atr_pct
+        atr_pct = get_current_atr_pct(settings.trading_coin)
+        assert isinstance(atr_pct, float)
+        assert atr_pct > 0
+        assert atr_pct < 1  # 100% ATR would be extreme
+        print(f"\n  ATR_pct: {atr_pct:.6f} ({atr_pct * 100:.3f}%)")
+
+    def test_get_fee_rate_pct(self):
+        """テストネットからフィーレート(%)を取得できるか"""
+        from src.trader import get_fee_rate_pct
+        rate = get_fee_rate_pct()
+        assert isinstance(rate, float)
+        assert rate > 0
+        assert rate < 1  # <1% round-trip is expected
+        print(f"\n  Fee rate (round-trip): {rate:.4f}%")
+
+    def test_get_dynamic_position_size_live(self):
+        """テストネットでATRベースの動的サイジングが動くか"""
+        from src.trader import get_dynamic_position_size
+        original = settings.dry_run
+        try:
+            settings.dry_run = False
+            size, equity = get_dynamic_position_size()
+            assert isinstance(size, float)
+            assert settings.min_position_usd <= size <= settings.max_position_usd
+            assert equity >= 0
+            print(f"\n  Dynamic size: ${size:.2f} (equity=${equity:.2f})")
+        finally:
+            settings.dry_run = original

@@ -216,8 +216,8 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     logger.info(
         f"Scheduler started. Coin={settings.trading_coin} "
-        f"Size=${settings.position_size_usd} Leverage={settings.leverage}x "
-        f"DryRun={settings.dry_run}"
+        f"RiskPct={settings.max_risk_pct}% ATR×{settings.atr_multiplier} "
+        f"Leverage={settings.leverage}x DryRun={settings.dry_run}"
     )
 
     bot_task = asyncio.create_task(start_bot())

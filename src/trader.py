@@ -73,6 +73,50 @@ def get_round_trip_fee() -> float:
     return settings.position_size_usd * rate * 2
 
 
+def get_account_equity() -> float:
+    """Fetch accountValue from Hyperliquid API. Falls back to position_size_usd/2."""
+    info = make_info()
+    state = info.user_state(settings.active_main_address)
+    return float(state["marginSummary"]["accountValue"])
+
+
+def get_current_atr_pct(coin: str) -> float:
+    """Return 15m ATR(14) as a fraction of current price (e.g. 0.004 = 0.4%)."""
+    from src.chart import fetch_candles, _atr
+    df = fetch_candles(coin, "15m", 30)
+    atr_series = _atr(df, 14)
+    atr_val = atr_series.iloc[-1]
+    current_price = float(df["Close"].iloc[-1])
+    return atr_val / current_price
+
+
+def get_dynamic_position_size() -> tuple[float, float]:
+    """ATR-based dynamic position size. Returns (size_usd, equity).
+    In dry_run mode, uses settings.position_size_usd as fallback."""
+    if settings.dry_run:
+        return settings.position_size_usd, settings.position_size_usd / 2
+    try:
+        equity = get_account_equity()
+        atr_pct = get_current_atr_pct(settings.trading_coin)
+        max_loss = equity * (settings.max_risk_pct / 100)
+        adverse = atr_pct * settings.atr_multiplier
+        size = max_loss / adverse if adverse > 0 else settings.position_size_usd
+        size = max(settings.min_position_usd, min(settings.max_position_usd, round(size, 2)))
+        logger.info(
+            f"Dynamic position size: ${size:.2f} "
+            f"(equity=${equity:.2f}, ATR_pct={atr_pct:.4f})"
+        )
+        return size, equity
+    except Exception as e:
+        logger.warning(f"Dynamic sizing failed, using fallback: {e}")
+        return settings.position_size_usd, settings.position_size_usd / 2
+
+
+def get_fee_rate_pct() -> float:
+    """Return round-trip fee rate in % (e.g. 0.09 for 0.09%)."""
+    return get_user_fee_rate() * 2 * 100
+
+
 def get_fill_fee(coin: str, oid: int | None = None) -> float | None:
     """Get fee from the most recent fill matching coin (and optionally oid).
     Returns fee in USD or None on error."""
@@ -225,6 +269,7 @@ def close_expired_positions():
                     "entry_price": trade.entry_price,
                     "exit_price": exit_price,
                     "pnl_usd": pnl,
+                    "size_usd": trade.size_usd,
                     "entry_time": trade.entry_time,
                     "exit_time": exit_time,
                     "archive_dir": f"/app/charts/trade_{trade.id}",
@@ -411,6 +456,7 @@ def sync_position_state():
                 "entry_price": db_trade.entry_price,
                 "exit_price": exit_price,
                 "pnl_usd": pnl,
+                "size_usd": db_trade.size_usd,
                 "entry_time": db_trade.entry_time,
                 "exit_time": exit_time,
                 "archive_dir": f"/app/charts/trade_{db_trade.id}",

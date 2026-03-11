@@ -55,12 +55,11 @@ def _fetch_candles_for_window(coin: str, start_time: datetime, window_hours: int
     return resp.json()
 
 
-def _calculate_mfe(coin: str, hold_time: datetime, hold_price: float, window_hours: int = 4, round_trip_fee: float | None = None):
+def _calculate_mfe(coin: str, hold_time: datetime, hold_price: float, window_hours: int = 4, fee_rate_pct: float | None = None):
     """
     Calculate Max Favorable Excursion for both long and short directions.
-    Returns (best_long_pnl, best_short_pnl, best_long_price, best_short_price).
-    PnL is calculated for position_size_usd with fees deducted.
-    round_trip_fee: pass pre-computed value to avoid redundant DB/API calls.
+    Returns (best_long_pnl_pct, best_short_pnl_pct, best_long_price, best_short_price).
+    PnL is in price change % with fee rate deducted.
     """
     candles = _fetch_candles_for_window(coin, hold_time, window_hours)
     if not candles:
@@ -72,15 +71,14 @@ def _calculate_mfe(coin: str, hold_time: datetime, hold_price: float, window_hou
     best_long_price = max(highs) if highs else hold_price
     best_short_price = min(lows) if lows else hold_price
 
-    if round_trip_fee is None:
-        from src.trader import get_round_trip_fee
-        round_trip_fee = get_round_trip_fee()
-    size = settings.position_size_usd
+    if fee_rate_pct is None:
+        from src.trader import get_fee_rate_pct
+        fee_rate_pct = get_fee_rate_pct()
 
-    best_long_pnl = (best_long_price - hold_price) / hold_price * size - round_trip_fee
-    best_short_pnl = (hold_price - best_short_price) / hold_price * size - round_trip_fee
+    best_long_pnl_pct = (best_long_price - hold_price) / hold_price * 100 - fee_rate_pct
+    best_short_pnl_pct = (hold_price - best_short_price) / hold_price * 100 - fee_rate_pct
 
-    return best_long_pnl, best_short_pnl, best_long_price, best_short_price
+    return best_long_pnl_pct, best_short_pnl_pct, best_long_price, best_short_price
 
 
 def _lookup_hold_cycle(cycle_id: int) -> dict | None:
@@ -124,7 +122,7 @@ def _lookup_hold_cycle(cycle_id: int) -> dict | None:
     return None
 
 
-def _build_hold_reflection_prompt(opportunity: dict, cycle_info: dict | None, round_trip_fee: float | None = None) -> str:
+def _build_hold_reflection_prompt(opportunity: dict, cycle_info: dict | None, fee_rate_pct: float | None = None) -> str:
     """Build the Claude prompt for missed-opportunity reflection."""
     opp_id = opportunity["id"]
     coin = opportunity["coin"]
@@ -132,10 +130,10 @@ def _build_hold_reflection_prompt(opportunity: dict, cycle_info: dict | None, ro
     hold_time = opportunity["hold_time"]
     max_price = opportunity["max_favorable_price"]
     direction = opportunity["max_favorable_direction"]
-    hyp_pnl = opportunity["hypothetical_pnl"]
+    hyp_pnl = opportunity["hypothetical_pnl"]  # now in %
     archive_dir = opportunity["chart_archive_dir"]
 
-    pnl_str = f"+${hyp_pnl:.2f}" if hyp_pnl >= 0 else f"-${abs(hyp_pnl):.2f}"
+    pnl_str = f"+{hyp_pnl:.2f}%" if hyp_pnl >= 0 else f"{hyp_pnl:.2f}%"
     direction_jp = "ロング" if direction == "long" else "ショート"
 
     if cycle_info:
@@ -161,7 +159,7 @@ def _build_hold_reflection_prompt(opportunity: dict, cycle_info: dict | None, ro
     else:
         reasoning_section = "\n## HOLD時のMAGI判断\n(記録なし)\n"
 
-    fee_block = fee_note(round_trip_fee) if round_trip_fee is not None else ""
+    fee_block = fee_note(fee_rate_pct) if fee_rate_pct is not None else ""
 
     return f"""# 見逃し機会の振り返りタスク
 
@@ -250,7 +248,7 @@ git pull --rebase --autostash && git add prompt/rule.html && git commit -m "refl
 
 
 
-def trigger_hold_reflection(opportunity_id: int, round_trip_fee: float | None = None) -> None:
+def trigger_hold_reflection(opportunity_id: int, fee_rate_pct: float | None = None) -> None:
     """Launch reflection with agent fallback chain for missed opportunity."""
     with get_session() as session:
         opp = session.query(HoldOpportunity).filter(HoldOpportunity.id == opportunity_id).first()
@@ -275,11 +273,11 @@ def trigger_hold_reflection(opportunity_id: int, round_trip_fee: float | None = 
         logger.info(f"No archive dir for hold opportunity {opportunity_id}, skipping")
         return
 
-    if round_trip_fee is None:
-        from src.trader import get_round_trip_fee
-        round_trip_fee = get_round_trip_fee()
+    if fee_rate_pct is None:
+        from src.trader import get_fee_rate_pct
+        fee_rate_pct = get_fee_rate_pct()
     cycle_info = _lookup_hold_cycle(opp_dict["cycle_id"])
-    prompt = _build_hold_reflection_prompt(opp_dict, cycle_info, round_trip_fee)
+    prompt = _build_hold_reflection_prompt(opp_dict, cycle_info, fee_rate_pct)
 
     chart_paths = [
         f"{archive_dir}/{f}" for f in os.listdir(archive_dir) if f.endswith(".png")
@@ -333,41 +331,41 @@ def check_pending_opportunities() -> None:
 
         logger.info(f"Checking {len(pending)} pending hold opportunities")
 
-        from src.trader import get_round_trip_fee
-        round_trip_fee = get_round_trip_fee()
-        threshold = round_trip_fee * settings.hold_reflection_min_pnl_multiplier
+        from src.trader import get_fee_rate_pct
+        fee_rate_pct = get_fee_rate_pct()
+        threshold_pct = fee_rate_pct * settings.hold_reflection_min_pnl_multiplier
 
         for opp in pending:
             try:
-                long_pnl, short_pnl, long_price, short_price = _calculate_mfe(
+                long_pnl_pct, short_pnl_pct, long_price, short_price = _calculate_mfe(
                     opp.coin, opp.hold_time, opp.hold_price,
                     settings.hold_reflection_window_hours,
-                    round_trip_fee=round_trip_fee,
+                    fee_rate_pct=fee_rate_pct,
                 )
 
                 # Pick the better direction
-                if long_pnl >= short_pnl:
-                    best_pnl = long_pnl
+                if long_pnl_pct >= short_pnl_pct:
+                    best_pnl_pct = long_pnl_pct
                     best_price = long_price
                     best_dir = "long"
                 else:
-                    best_pnl = short_pnl
+                    best_pnl_pct = short_pnl_pct
                     best_price = short_price
                     best_dir = "short"
 
                 opp.check_time = datetime.utcnow()
                 opp.max_favorable_price = best_price
                 opp.max_favorable_direction = best_dir
-                opp.hypothetical_pnl = best_pnl
+                opp.hypothetical_pnl = best_pnl_pct
 
-                if best_pnl >= threshold:
+                if best_pnl_pct >= threshold_pct:
                     opp.status = "checked"
                     session.commit()
                     logger.info(
-                        f"Hold opportunity {opp.id}: missed ${best_pnl:.2f} ({best_dir}) "
+                        f"Hold opportunity {opp.id}: missed {best_pnl_pct:.2f}% ({best_dir}) "
                         f"— triggering reflection"
                     )
-                    trigger_hold_reflection(opp.id, round_trip_fee=round_trip_fee)
+                    trigger_hold_reflection(opp.id, fee_rate_pct=fee_rate_pct)
                     continue  # status already updated in trigger_hold_reflection
                 else:
                     opp.status = "skipped"
@@ -377,8 +375,8 @@ def check_pending_opportunities() -> None:
                         shutil.rmtree(opp.chart_archive_dir, ignore_errors=True)
                         logger.info(f"Cleaned up charts: {opp.chart_archive_dir}")
                     logger.info(
-                        f"Hold opportunity {opp.id}: best PnL ${best_pnl:.2f} "
-                        f"below threshold ${threshold:.2f} — skipped"
+                        f"Hold opportunity {opp.id}: best PnL {best_pnl_pct:.2f}% "
+                        f"below threshold {threshold_pct:.2f}% — skipped"
                     )
             except Exception as e:
                 logger.error(f"Error checking hold opportunity {opp.id}: {e}")

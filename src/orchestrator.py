@@ -58,7 +58,7 @@ _PROMPT_IN_POSITION = """\
 - サイド: {side}
 - エントリー価格: ${entry_price:,.2f}
 - 保有時間: {elapsed}
-- 含み損益: {pnl_sign}${pnl_usd:.2f}（推定）
+- 含み損益: {pnl_sign}{pnl_pct:.2f}%（推定）
 
 以下の{count}つのチャートを Read ツールで開いてください:
 {chart_list}
@@ -93,7 +93,7 @@ _PROMPT_EMERGENCY = """\
 - サイド: {side}
 - エントリー価格: ${entry_price:,.2f}
 - 保有時間: {elapsed}
-- 含み損益: {pnl_sign}${pnl_usd:.2f}（推定）
+- 含み損益: {pnl_sign}{pnl_pct:.2f}%（推定）
 
 以下の{count}つのチャートを Read ツールで開いてください:
 {chart_list}
@@ -120,13 +120,17 @@ def _load_context() -> str:
     try:
         with open(_CONTEXT_FILE) as f:
             content = f.read().strip()
-        from src.trader import get_round_trip_fee
-        round_trip_fee = get_round_trip_fee()
+        from src.trader import get_dynamic_position_size, get_fee_rate_pct
+        size_usd, _ = get_dynamic_position_size()
+        fee_rate_pct = get_fee_rate_pct()
         context = content.format(
             position_min_hours=settings.position_min_hours,
             position_max_hours=settings.position_max_hours,
             cycle_interval_minutes=settings.cycle_interval_minutes,
-            round_trip_fee=f"${round_trip_fee:.4f}",
+            position_size_usd=f"{size_usd:.0f}",
+            max_risk_pct=settings.max_risk_pct,
+            atr_multiplier=settings.atr_multiplier,
+            fee_rate_pct=f"{fee_rate_pct:.3f}",
         )
     except FileNotFoundError:
         logger.warning(f"Context file not found: {_CONTEXT_FILE}")
@@ -218,6 +222,10 @@ def run_cycle(
                         if entry_cycle.target_price:
                             entry_target = f"${entry_cycle.target_price:,.2f}"
 
+        # Calculate PnL as price change %
+        size_usd = live_position.get("size_usd") or 1
+        pnl_pct = abs(pnl) / size_usd * 100 if size_usd else 0
+
         prompt_vars = dict(
             context=context,
             reflections=reflections,
@@ -225,7 +233,7 @@ def run_cycle(
             entry_price=live_position["entry_price"],
             elapsed=elapsed_str,
             pnl_sign="+" if pnl >= 0 else "-",
-            pnl_usd=abs(pnl),
+            pnl_pct=pnl_pct,
             count=len(charts),
             chart_list=chart_list_str,
             freshness=freshness_text,

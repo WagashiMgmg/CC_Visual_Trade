@@ -27,7 +27,10 @@ logger = logging.getLogger(__name__)
 
 def run():
     coin = settings.trading_coin
-    size_usd = settings.position_size_usd
+
+    from src.trader import get_dynamic_position_size
+    size_usd, equity = get_dynamic_position_size()
+    logger.info(f"Position size: ${size_usd:.2f} (equity=${equity:.2f})")
 
     cycle_id_env = os.environ.get("CYCLE_ID")
     cycle_id = int(cycle_id_env) if cycle_id_env else None

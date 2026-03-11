@@ -17,13 +17,12 @@ CHARTS_DIR = "/app/charts"
 REFLECTIONS_DIR = "/app/data/reflections"
 HYPOTHESES_FILE = "/app/data/reflections/hypotheses.md"
 
-def fee_note(round_trip_fee: float) -> str:
+def fee_note(fee_rate_pct: float) -> str:
     """Fee info block injected into all reflection prompts."""
     return f"""## システムフィー（ルール記述の参照値）
-- 直近トレードの往復フィー実績: **${round_trip_fee:.4f}**（エントリー+エグジット実費）
-- ⚠️ `rule.html` のルール内でフィーを参照する場合は具体的なドル額を書かず「往復フィー」と表記すること。
-  例: ✓「期待利益が往復フィーの2倍以上」　✗「$0.60以上」
-  補足として `（現在≈${round_trip_fee:.3f}）` を添えるのは可。
+- 往復フィーレート: **~{fee_rate_pct:.3f}%**
+- ⚠️ `rule.html` のルール内でフィーを参照する場合は「往復フィー」と表記すること。
+  例: ✓「期待利益が往復フィーの2倍以上」
 
 """
 
@@ -213,7 +212,7 @@ def _format_cycle_history(all_cycles: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _build_reflection_prompt(trade_info: dict, cycle_history: list[dict] | None, round_trip_fee: float | None = None) -> str:
+def _build_reflection_prompt(trade_info: dict, cycle_history: list[dict] | None, fee_rate_pct: float | None = None) -> str:
     """Build the Claude prompt for post-trade reflection."""
     archive_dir = trade_info["archive_dir"]
     trade_id = trade_info.get("trade_id", "?")
@@ -222,10 +221,12 @@ def _build_reflection_prompt(trade_info: dict, cycle_history: list[dict] | None,
     entry_price = trade_info.get("entry_price", 0)
     exit_price = trade_info.get("exit_price", 0)
     pnl = trade_info.get("pnl_usd", 0)
+    size_usd = trade_info.get("size_usd", 0) or 1
     entry_time = trade_info.get("entry_time", "?")
     exit_time = trade_info.get("exit_time", "?")
 
-    pnl_str = f"+${pnl:.2f}" if pnl >= 0 else f"-${abs(pnl):.2f}"
+    pnl_pct = pnl / size_usd * 100
+    pnl_str = f"+{pnl_pct:.2f}%" if pnl_pct >= 0 else f"{pnl_pct:.2f}%"
     result_label = "WIN" if pnl > 0 else ("LOSS" if pnl < 0 else "BREAK-EVEN")
 
     if cycle_history:
@@ -233,7 +234,7 @@ def _build_reflection_prompt(trade_info: dict, cycle_history: list[dict] | None,
     else:
         reasoning_section = "\n## MAGI判断履歴\n（記録なし）\n"
 
-    fee_block = fee_note(round_trip_fee) if round_trip_fee is not None else ""
+    fee_block = fee_note(fee_rate_pct) if fee_rate_pct is not None else ""
 
     return f"""# トレード振り返りタスク
 
@@ -382,9 +383,9 @@ def trigger_reflection(trade_info: dict) -> None:
         return
 
     cycle_history = _lookup_all_cycles(trade_info.get("trade_id"))
-    from src.trader import get_round_trip_fee
-    round_trip_fee = get_round_trip_fee()
-    prompt = _build_reflection_prompt(trade_info, cycle_history, round_trip_fee)
+    from src.trader import get_fee_rate_pct
+    fee_rate_pct = get_fee_rate_pct()
+    prompt = _build_reflection_prompt(trade_info, cycle_history, fee_rate_pct)
 
     trade_id = trade_info.get("trade_id", "?")
     chart_paths = [

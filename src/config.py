@@ -21,8 +21,14 @@ class Settings(BaseSettings):
 
     # Trading
     trading_coin: str = "BTC"
-    position_size_usd: float = 100.0
+    position_size_usd: float = 100.0  # fallback when API/ATR unavailable
     leverage: int = 3
+
+    # Dynamic position sizing (ATR-based)
+    max_risk_pct: float = 2.0        # Max risk per trade (% of equity)
+    atr_multiplier: float = 2.0      # Assumed adverse move (multiple of ATR)
+    min_position_usd: float = 20.0   # Position size floor
+    max_position_usd: float = 500.0  # Position size ceiling
 
     # Dashboard
     dashboard_port: int = 8080

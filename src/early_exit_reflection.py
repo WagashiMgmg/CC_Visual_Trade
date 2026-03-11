@@ -119,14 +119,12 @@ def _calculate_post_exit_outcomes(
     entry_price: float,
     exit_time: datetime,
     window_end_time: datetime,
-    size_usd: float,
 ) -> tuple[float, float, float, float]:
     """Calculate what would have happened if the trade was held after exit.
 
     Returns (price_at_window_end, max_favorable_price,
-             hypothetical_pnl, max_hypothetical_pnl).
-    Both PnL values are calculated from entry_price (total trade PnL),
-    so they can be compared directly with actual_pnl.
+             hypothetical_pnl_pct, max_hypothetical_pnl_pct).
+    PnL values are in price change % from entry_price.
     """
     candles = _fetch_candles(coin, exit_time, window_end_time)
     if not candles:
@@ -136,34 +134,34 @@ def _calculate_post_exit_outcomes(
 
     if side == "long":
         max_favorable_price = max(float(c["h"]) for c in candles)
-        hyp_pnl = (price_at_window_end - entry_price) / entry_price * size_usd
-        max_hyp_pnl = (max_favorable_price - entry_price) / entry_price * size_usd
+        hyp_pnl_pct = (price_at_window_end - entry_price) / entry_price * 100
+        max_hyp_pnl_pct = (max_favorable_price - entry_price) / entry_price * 100
     else:
         max_favorable_price = min(float(c["l"]) for c in candles)
-        hyp_pnl = (entry_price - price_at_window_end) / entry_price * size_usd
-        max_hyp_pnl = (entry_price - max_favorable_price) / entry_price * size_usd
+        hyp_pnl_pct = (entry_price - price_at_window_end) / entry_price * 100
+        max_hyp_pnl_pct = (entry_price - max_favorable_price) / entry_price * 100
 
-    return price_at_window_end, max_favorable_price, hyp_pnl, max_hyp_pnl
+    return price_at_window_end, max_favorable_price, hyp_pnl_pct, max_hyp_pnl_pct
 
 
-def _build_early_exit_prompt(opportunity: dict, round_trip_fee: float | None = None) -> str:
+def _build_early_exit_prompt(opportunity: dict, fee_rate_pct: float | None = None) -> str:
     """Build the Claude prompt for early-exit reflection."""
     opp_id = opportunity["id"]
     coin = opportunity["coin"]
     side = opportunity["side"]
     entry_price = opportunity["entry_price"]
     exit_price = opportunity["exit_price"]
-    actual_pnl = opportunity["actual_pnl"]
+    actual_pnl = opportunity["actual_pnl"]  # now in %
     exit_time = opportunity["exit_time"]
     window_end_time = opportunity["window_end_time"]
     price_at_end = opportunity["price_at_window_end"]
     max_price = opportunity["max_favorable_price"]
-    hyp_pnl = opportunity["hypothetical_pnl"]
-    max_hyp_pnl = opportunity["max_hypothetical_pnl"]
+    hyp_pnl = opportunity["hypothetical_pnl"]  # now in %
+    max_hyp_pnl = opportunity["max_hypothetical_pnl"]  # now in %
     archive_dir = opportunity["chart_archive_dir"]
 
     def fmt_pnl(v):
-        return f"+${v:.2f}" if v >= 0 else f"-${abs(v):.2f}"
+        return f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%"
 
     actual_str = fmt_pnl(actual_pnl)
     hyp_str = fmt_pnl(hyp_pnl)
@@ -171,7 +169,7 @@ def _build_early_exit_prompt(opportunity: dict, round_trip_fee: float | None = N
     improvement = hyp_pnl - actual_pnl
     improvement_str = fmt_pnl(improvement)
     side_jp = "ロング" if side == "long" else "ショート"
-    fee_block = fee_note(round_trip_fee) if round_trip_fee is not None else ""
+    fee_block = fee_note(fee_rate_pct) if fee_rate_pct is not None else ""
 
     return f"""# 早期EXIT振り返りタスク
 
@@ -281,7 +279,7 @@ git pull --rebase --autostash && git add prompt/rule.html && git commit -m "refl
 """
 
 
-def trigger_early_exit_reflection(opp_id: int, round_trip_fee: float | None = None) -> None:
+def trigger_early_exit_reflection(opp_id: int, fee_rate_pct: float | None = None) -> None:
     """Launch reflection with agent fallback chain for early exit."""
     with get_session() as session:
         opp = (
@@ -315,10 +313,10 @@ def trigger_early_exit_reflection(opp_id: int, round_trip_fee: float | None = No
         logger.info(f"No archive dir for early exit {opp_id}, skipping reflection")
         return
 
-    if round_trip_fee is None:
-        from src.trader import get_round_trip_fee
-        round_trip_fee = get_round_trip_fee()
-    prompt = _build_early_exit_prompt(opp_dict, round_trip_fee)
+    if fee_rate_pct is None:
+        from src.trader import get_fee_rate_pct
+        fee_rate_pct = get_fee_rate_pct()
+    prompt = _build_early_exit_prompt(opp_dict, fee_rate_pct)
 
     chart_paths = [
         f"{archive_dir}/{f}" for f in os.listdir(archive_dir) if f.endswith(".png")
@@ -403,46 +401,53 @@ def check_pending_early_exits() -> None:
             + (f", retrying {len(stale)} stale" if stale else "")
         )
 
-        from src.trader import get_round_trip_fee
-        round_trip_fee = get_round_trip_fee()
-        threshold = round_trip_fee * settings.hold_reflection_min_pnl_multiplier
+        from src.trader import get_fee_rate_pct
+        fee_rate_pct = get_fee_rate_pct()
+        threshold_pct = fee_rate_pct * settings.hold_reflection_min_pnl_multiplier
 
         for opp in pending:
             try:
-                price_at_end, max_price, hyp_pnl, max_hyp_pnl = _calculate_post_exit_outcomes(
+                # Convert actual_pnl (USD) to % for comparison
+                actual_pnl_pct = opp.actual_pnl / (opp.entry_price * 1) * 100 if opp.entry_price else 0
+                # For long: pnl_pct = (exit - entry) / entry * 100
+                if opp.side == "long":
+                    actual_pnl_pct = (opp.exit_price - opp.entry_price) / opp.entry_price * 100
+                else:
+                    actual_pnl_pct = (opp.entry_price - opp.exit_price) / opp.entry_price * 100
+
+                price_at_end, max_price, hyp_pnl_pct, max_hyp_pnl_pct = _calculate_post_exit_outcomes(
                     opp.coin,
                     opp.side,
                     opp.entry_price,
                     opp.exit_time,
                     opp.window_end_time,
-                    settings.position_size_usd,
                 )
 
-                improvement = hyp_pnl - opp.actual_pnl
+                improvement_pct = hyp_pnl_pct - actual_pnl_pct
 
                 opp.check_time = now
                 opp.price_at_window_end = price_at_end
                 opp.max_favorable_price = max_price
-                opp.hypothetical_pnl = hyp_pnl
-                opp.max_hypothetical_pnl = max_hyp_pnl
+                opp.hypothetical_pnl = hyp_pnl_pct
+                opp.max_hypothetical_pnl = max_hyp_pnl_pct
 
-                if improvement >= threshold:
+                if improvement_pct >= threshold_pct:
                     opp.status = "checked"
                     session.commit()
                     logger.info(
                         f"Early exit {opp.id} (trade {opp.trade_id}): "
-                        f"holding would have improved PnL by ${improvement:.2f} "
+                        f"holding would have improved PnL by {improvement_pct:.2f}% "
                         f"— triggering reflection"
                     )
-                    trigger_early_exit_reflection(opp.id, round_trip_fee=round_trip_fee)
+                    trigger_early_exit_reflection(opp.id, fee_rate_pct=fee_rate_pct)
                 else:
                     opp.status = "skipped"
                     if opp.chart_archive_dir:
                         shutil.rmtree(opp.chart_archive_dir, ignore_errors=True)
                     session.commit()
                     logger.info(
-                        f"Early exit {opp.id}: improvement ${improvement:.2f} "
-                        f"below threshold ${threshold:.2f} — skipped"
+                        f"Early exit {opp.id}: improvement {improvement_pct:.2f}% "
+                        f"below threshold {threshold_pct:.2f}% — skipped"
                     )
 
             except Exception as e:
@@ -454,4 +459,4 @@ def check_pending_early_exits() -> None:
                 f"Retrying stale early exit {opp.id} (trade {opp.trade_id}): "
                 f"status=checked but reflection_path=NULL — relaunching"
             )
-            trigger_early_exit_reflection(opp.id, round_trip_fee=round_trip_fee)
+            trigger_early_exit_reflection(opp.id, fee_rate_pct=fee_rate_pct)
