@@ -55,7 +55,10 @@ class Settings(BaseSettings):
     # Hold reflection (missed opportunity analysis)
     hold_reflection_enabled: bool = True
     hold_reflection_window_hours: int = 4
-    hold_reflection_min_pnl_multiplier: float = 3.0  # min hypothetical PnL as multiple of round-trip fees
+    hold_reflection_min_pnl_pct: float = 2.5  # min hypothetical PnL % to trigger hold reflection
+
+    # Late/early exit reflection threshold
+    reflection_min_pnl_multiplier: float = 3.0  # min PnL as multiple of round-trip fees
 
     # Fee
     fee_rate_fallback: float = 0.00045  # API取得失敗時のフォールバック (0.045% taker)

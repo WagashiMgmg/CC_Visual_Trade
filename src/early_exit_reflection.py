@@ -403,7 +403,7 @@ def check_pending_early_exits() -> None:
 
         from src.trader import get_fee_rate_pct
         fee_rate_pct = get_fee_rate_pct()
-        threshold_pct = fee_rate_pct * settings.hold_reflection_min_pnl_multiplier
+        threshold_pct = fee_rate_pct * settings.reflection_min_pnl_multiplier
 
         for opp in pending:
             try:

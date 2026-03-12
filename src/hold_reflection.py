@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 from src.config import settings
-from src.database import Cycle, HoldOpportunity, MagiVote, get_session
+from src.database import Cycle, HoldOpportunity, MagiVote, Trade, get_session
 from src.reflection import RULE_CONSISTENCY_CHECK, fee_note
 
 logger = logging.getLogger(__name__)
@@ -333,7 +333,7 @@ def check_pending_opportunities() -> None:
 
         from src.trader import get_fee_rate_pct
         fee_rate_pct = get_fee_rate_pct()
-        threshold_pct = fee_rate_pct * settings.hold_reflection_min_pnl_multiplier
+        threshold_pct = settings.hold_reflection_min_pnl_pct
 
         for opp in pending:
             try:
@@ -359,6 +359,29 @@ def check_pending_opportunities() -> None:
                 opp.hypothetical_pnl = best_pnl_pct
 
                 if best_pnl_pct >= threshold_pct:
+                    # Skip if a trade in the same direction was opened after this HOLD
+                    window_end = opp.hold_time + timedelta(hours=settings.hold_reflection_window_hours)
+                    same_dir_trade = (
+                        session.query(Trade)
+                        .filter(
+                            Trade.coin == opp.coin,
+                            Trade.side == best_dir,
+                            Trade.entry_time >= opp.hold_time,
+                            Trade.entry_time <= window_end,
+                        )
+                        .first()
+                    )
+                    if same_dir_trade:
+                        opp.status = "skipped"
+                        session.commit()
+                        if opp.chart_archive_dir:
+                            shutil.rmtree(opp.chart_archive_dir, ignore_errors=True)
+                        logger.info(
+                            f"Hold opportunity {opp.id}: skipped — "
+                            f"same-direction trade #{same_dir_trade.id} ({best_dir}) exists"
+                        )
+                        continue
+
                     opp.status = "checked"
                     session.commit()
                     logger.info(
