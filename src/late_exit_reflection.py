@@ -165,7 +165,7 @@ ls {archive_dir}
 
 ステップ4: まず以下のコマンドで `rule.html` の過去の変更履歴（diff付き）を確認し、ルール更新の傾向・文脈を把握してください:
 ```bash
-git log -p -20 -- prompt/rule.html
+git log -p -5 -- prompt/rule.html
 ```
 履歴を参考にした上で、`/app/prompt/rule.html` をReadツールで読み込み、`<h2>学習済みルール</h2>` と `<h2>エントリー推奨条件</h2>` の2セクションをEditツールで更新してください。ファイルはHTMLで記述されています。Markdownではなく正しいHTMLタグを使用し、ファイル冒頭の **ルール管理** と **ルール見直し** に記載されたポリシーに従って以下を行ってください。
 

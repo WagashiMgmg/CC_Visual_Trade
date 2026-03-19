@@ -121,7 +121,7 @@ def _run_reflection_inner(
 
     result = run_with_fallback(
         agents, prompt_for,
-        allowed_tools=tools_for, timeout=900,
+        allowed_tools=tools_for, timeout=1500,
     )
 
     if result is None:
