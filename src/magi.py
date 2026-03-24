@@ -243,7 +243,7 @@ class GeminiAgent(MagiAgent):
                     break  # Non-quota failure, skip remaining models
             logger.warning(f"[{self.display}] quota exceeded on {model}, trying next model")
 
-        logger.error(f"[{self.display}] all models quota-exceeded — marking OFFLINE")
+        logger.error(f"[{self.display}] all models exhausted — marking OFFLINE")
         self.available = False
         return None
 
@@ -259,18 +259,23 @@ class GeminiAgent(MagiAgent):
             cmd += ["-m", model]
         cmd += ["-p", prompt]
         try:
+            env = os.environ.copy()
+            env["NODE_OPTIONS"] = "--max-old-space-size=8192"
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
                 cwd="/app",
-                env=os.environ.copy(),
+                env=env,
             )
             if result.returncode != 0:
                 stderr = result.stderr
                 if "TerminalQuotaError" in stderr or "exhausted your capacity" in stderr:
                     return None, True
+                if "allocation failure" in stderr or "JavaScript heap" in stderr:
+                    logger.error(f"[{self.display}] OOM crash ({model or 'default'})")
+                    return None, False
                 logger.warning(f"[{self.display}] non-zero exit ({model or 'default'}): {stderr[:200]}")
                 return None, False
             return result.stdout, False
