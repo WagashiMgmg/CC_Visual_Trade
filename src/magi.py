@@ -17,7 +17,6 @@ import logging
 import os
 import re
 import subprocess
-import tempfile
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -127,7 +126,7 @@ class ClaudeAgent(MagiAgent):
                 timeout: int = 600) -> AgentResult | None:
         try:
             cmd = [
-                "claude", "-p", prompt,
+                "claude", "-p", "-",
                 "--model", self._MODEL,
                 "--permission-mode", "bypassPermissions",
                 "--no-session-persistence",
@@ -138,6 +137,7 @@ class ClaudeAgent(MagiAgent):
             env.pop("CLAUDECODE", None)
             result = subprocess.run(
                 cmd,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -257,12 +257,15 @@ class GeminiAgent(MagiAgent):
         cmd = ["gemini"]
         if model:
             cmd += ["-m", model]
-        cmd += ["-p", prompt]
+        # Pass prompt via stdin to avoid ARG_MAX limits.
+        # Gemini CLI: stdin is read and -p value is appended to it.
+        cmd += ["-p", ""]
         try:
             env = os.environ.copy()
             env["NODE_OPTIONS"] = "--max-old-space-size=8192"
             result = subprocess.run(
                 cmd,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -330,7 +333,7 @@ class CasparAgent(MagiAgent):
             raise NotImplementedError("Codex CLI 未実装")
         try:
             cmd = [
-                "claude", "-p", prompt,
+                "claude", "-p", "-",
                 "--model", self._HAIKU_MODEL,
                 "--permission-mode", "bypassPermissions",
                 "--no-session-persistence",
@@ -341,6 +344,7 @@ class CasparAgent(MagiAgent):
             env.pop("CLAUDECODE", None)
             result = subprocess.run(
                 cmd,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=timeout,

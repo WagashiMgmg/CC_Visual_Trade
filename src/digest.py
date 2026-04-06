@@ -194,11 +194,12 @@ def curate_digest() -> None:
         env.pop("CLAUDECODE", None)
         result = subprocess.run(
             [
-                "claude", "-p", prompt,
+                "claude", "-p", "-",
                 "--allowedTools", "Read,Write",
                 "--permission-mode", "bypassPermissions",
                 "--no-session-persistence",
             ],
+            input=prompt,
             cwd="/app",
             capture_output=True,
             text=True,
